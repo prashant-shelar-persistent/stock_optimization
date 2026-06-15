@@ -74,8 +74,14 @@ podman-compose up --build
 docker compose up --build
 ```
 
-Under Docker Desktop the override is harmless (the unknown `userns_mode`
-value is ignored with a warning). If you'd rather drop it, delete the file.
+Under **Docker Desktop** the `keep-id` value is rejected (Docker only
+accepts `host` or empty for `userns_mode`). Either delete/rename
+`docker-compose.override.yml`, or skip the auto-loaded override by passing
+the base file explicitly:
+
+```bash
+docker compose -f docker-compose.yml up --build
+```
 
 ### Local Development (without Docker)
 

@@ -4,7 +4,8 @@
 # This file is auto-loaded by `docker compose` / `podman-compose` whenever it
 # sits next to `docker-compose.yml`. It applies fixes that are needed when the
 # stack is run under **rootless Podman** (the default on macOS / modern
-# Fedora / RHEL 9+) but are harmless under Docker Desktop.
+# Fedora / RHEL 9+). If you use Docker Desktop instead, see the "Docker
+# compatibility" note at the bottom of this file.
 #
 # The bug it fixes
 # ----------------
@@ -34,10 +35,17 @@
 # source code for hot-reload.
 #
 # Docker compatibility:
-#   `userns_mode: "keep-id"` is a no-op string under Docker Engine (Docker
-#   simply ignores unknown values for `userns_mode` with a warning), so this
-#   override is safe to keep checked in. If you prefer to skip it under
-#   Docker, just delete or rename this file.
+#   `keep-id` is a Podman-specific value. Docker Engine's `userns_mode`
+#   only accepts `host` or an empty string, and recent Docker versions will
+#   refuse to start the service with the value `keep-id`. If you are on
+#   Docker Desktop, either delete/rename this file or pass
+#   ``-f docker-compose.yml`` explicitly so the override is not auto-loaded:
+#
+#       docker compose -f docker-compose.yml up --build
+#
+#   Under rootless Podman (the case this file targets) just run:
+#
+#       podman-compose up --build
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
