@@ -1,0 +1,26 @@
+################################################################################
+# Production terraform.tfvars — EXAMPLE
+#
+# Copy this file to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars to version control.
+# Add terraform.tfvars to .gitignore.
+################################################################################
+
+aws_region = "us-east-1"
+
+# Image tags — set by CI/CD pipeline (e.g., git SHA)
+backend_image_tag  = "sha-abc1234"
+worker_image_tag   = "sha-abc1234"
+frontend_image_tag = "sha-abc1234"
+
+# Secrets — use strong, randomly generated values
+openai_api_key   = "sk-..."
+db_password      = "CHANGE_ME_strong_password_here"
+redis_auth_token = "CHANGE_ME_strong_redis_token_here"
+
+# DNS / TLS — set after creating ACM certificate and Route 53 hosted zone
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+domain_name         = "portfolio-optimizer.example.com"
+
+# Alerting — set after creating SNS topic
+alarm_sns_topic_arn = "arn:aws:sns:us-east-1:123456789012:portfolio-optimizer-alerts"

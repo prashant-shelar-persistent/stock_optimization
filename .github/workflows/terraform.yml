@@ -1,0 +1,323 @@
+################################################################################
+# GitHub Actions — Terraform CI/CD
+#
+# Triggers:
+#   - Pull requests targeting main: runs terraform plan (no apply)
+#   - Push to main: runs terraform apply for staging
+#   - Manual dispatch: runs terraform apply for selected environment
+#
+# Required GitHub Secrets:
+#   AWS_ROLE_ARN              — IAM role ARN for OIDC authentication
+#   TF_STATE_BUCKET           — S3 bucket for Terraform state
+#   TF_STATE_LOCK_TABLE       — DynamoDB table for state locking
+#   OPENAI_API_KEY            — OpenAI API key
+#   DB_PASSWORD               — PostgreSQL master password
+#   REDIS_AUTH_TOKEN          — Redis AUTH token
+#   ACM_CERTIFICATE_ARN       — ACM certificate ARN (optional)
+#   DOMAIN_NAME               — Application domain name (optional)
+#   ALARM_SNS_TOPIC_ARN       — SNS topic for alarms (optional)
+################################################################################
+
+name: Terraform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      action:
+        description: "Terraform action"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+  pull-requests: write  # Required to post plan output as PR comment
+
+env:
+  TF_VERSION: "1.8.5"
+  AWS_REGION: "us-east-1"
+
+jobs:
+  ################################################################################
+  # Validate — runs on all triggers
+  ################################################################################
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive infra/terraform/
+        continue-on-error: false
+
+      - name: Validate Root Module
+        working-directory: infra/terraform
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Modules
+        run: |
+          for module_dir in infra/terraform/modules/*/; do
+            echo "Validating $module_dir..."
+            cd "$module_dir"
+            terraform init -backend=false
+            terraform validate
+            cd -
+          done
+
+  ################################################################################
+  # Plan — runs on pull requests
+  ################################################################################
+  plan-staging:
+    name: Plan (Staging)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init (Staging)
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=portfolio-optimizer/staging/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_STATE_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan (Staging)
+        id: plan
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform plan \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="redis_auth_token=${{ secrets.REDIS_AUTH_TOKEN }}" \
+            -var="backend_image_tag=latest" \
+            -var="worker_image_tag=latest" \
+            -var="frontend_image_tag=latest" \
+            -no-color \
+            -out=tfplan 2>&1 | tee plan_output.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('infra/terraform/environments/staging/plan_output.txt', 'utf8');
+            const truncated = planOutput.length > 60000
+              ? planOutput.substring(0, 60000) + '\n\n... (truncated)'
+              : planOutput;
+
+            const body = `## Terraform Plan — Staging
+
+            <details>
+            <summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${truncated}
+            \`\`\`
+
+            </details>
+
+            **Plan exit code:** ${{ steps.plan.outputs.exitcode }}`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Check Plan Status
+        if: steps.plan.outputs.exitcode != '0'
+        run: exit 1
+
+  ################################################################################
+  # Apply Staging — runs on push to main
+  ################################################################################
+  apply-staging:
+    name: Apply (Staging)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+    concurrency:
+      group: terraform-staging
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init (Staging)
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=portfolio-optimizer/staging/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_STATE_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Apply (Staging)
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform apply \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="redis_auth_token=${{ secrets.REDIS_AUTH_TOKEN }}" \
+            -var="backend_image_tag=${{ github.sha }}" \
+            -var="worker_image_tag=${{ github.sha }}" \
+            -var="frontend_image_tag=${{ github.sha }}" \
+            -auto-approve \
+            -no-color
+
+  ################################################################################
+  # Manual Dispatch — plan or apply for any environment
+  ################################################################################
+  manual-dispatch:
+    name: Manual (${{ github.event.inputs.environment }} / ${{ github.event.inputs.action }})
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment }}
+    concurrency:
+      group: terraform-${{ github.event.inputs.environment }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/${{ github.event.inputs.environment }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=portfolio-optimizer/${{ github.event.inputs.environment }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_STATE_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan'
+        working-directory: infra/terraform/environments/${{ github.event.inputs.environment }}
+        run: |
+          terraform plan \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="redis_auth_token=${{ secrets.REDIS_AUTH_TOKEN }}" \
+            -var="acm_certificate_arn=${{ secrets.ACM_CERTIFICATE_ARN }}" \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="alarm_sns_topic_arn=${{ secrets.ALARM_SNS_TOPIC_ARN }}" \
+            -var="backend_image_tag=${{ github.sha }}" \
+            -var="worker_image_tag=${{ github.sha }}" \
+            -var="frontend_image_tag=${{ github.sha }}" \
+            -no-color
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        working-directory: infra/terraform/environments/${{ github.event.inputs.environment }}
+        run: |
+          terraform apply \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="redis_auth_token=${{ secrets.REDIS_AUTH_TOKEN }}" \
+            -var="acm_certificate_arn=${{ secrets.ACM_CERTIFICATE_ARN }}" \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="alarm_sns_topic_arn=${{ secrets.ALARM_SNS_TOPIC_ARN }}" \
+            -var="backend_image_tag=${{ github.sha }}" \
+            -var="worker_image_tag=${{ github.sha }}" \
+            -var="frontend_image_tag=${{ github.sha }}" \
+            -auto-approve \
+            -no-color
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        working-directory: infra/terraform/environments/${{ github.event.inputs.environment }}
+        run: |
+          terraform destroy \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="redis_auth_token=${{ secrets.REDIS_AUTH_TOKEN }}" \
+            -var="acm_certificate_arn=${{ secrets.ACM_CERTIFICATE_ARN }}" \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="alarm_sns_topic_arn=${{ secrets.ALARM_SNS_TOPIC_ARN }}" \
+            -var="backend_image_tag=latest" \
+            -var="worker_image_tag=latest" \
+            -var="frontend_image_tag=latest" \
+            -auto-approve \
+            -no-color

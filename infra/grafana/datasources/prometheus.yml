@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Grafana Datasource Provisioning — Prometheus
+#
+# This file is mounted at /etc/grafana/provisioning/datasources/prometheus.yml
+# inside the Grafana container. Grafana reads it on startup and automatically
+# creates (or updates) the Prometheus datasource without requiring manual UI
+# configuration.
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+# List of datasources to insert/update on startup.
+# Existing datasources with the same name are updated.
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # Mark as the default datasource so dashboards work without explicit selection
+    isDefault: true
+    access: proxy
+    # Prometheus is reachable at this URL from within the Docker network
+    url: http://prometheus:9090
+    # Prevent users from accidentally deleting this provisioned datasource via the UI
+    editable: false
+    # Datasource UID — referenced by dashboard panels to avoid name-based coupling
+    uid: "prometheus-portfolio-optimizer"
+    jsonData:
+      # Prometheus HTTP API version (use v1 for compatibility with Prometheus 2.x)
+      httpMethod: POST
+      # Align query time ranges to the scrape interval for cleaner graphs
+      timeInterval: "15s"
+      # Enable exemplar support (requires Prometheus 2.26+)
+      exemplarTraceIdDestinations: []
+      # Query timeout
+      queryTimeout: "60s"
+      # Disable TLS verification for internal Docker network communication
+      tlsSkipVerify: false

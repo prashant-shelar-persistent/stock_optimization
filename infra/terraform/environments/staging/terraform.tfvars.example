@@ -1,0 +1,22 @@
+################################################################################
+# Staging terraform.tfvars — EXAMPLE
+#
+# Copy this file to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars to version control.
+################################################################################
+
+aws_region = "us-east-1"
+
+backend_image_tag  = "latest"
+worker_image_tag   = "latest"
+frontend_image_tag = "latest"
+
+openai_api_key   = "sk-..."
+db_password      = "staging_password_here"
+redis_auth_token = "staging_redis_token_here"
+
+# Optional — leave empty to use HTTP only
+acm_certificate_arn = ""
+domain_name         = "staging.portfolio-optimizer.example.com"
+
+alarm_sns_topic_arn = ""

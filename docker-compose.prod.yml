@@ -1,0 +1,740 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Portfolio Optimizer — Production Docker Compose
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   1. Copy .env.prod.example → .env.prod and fill in all required values.
+#   2. Run:  docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Security model:
+#   - All services run as non-root users where possible.
+#   - Internal services (postgres, redis, exporters) are NOT exposed on the
+#     host network; they communicate only on the internal Docker networks.
+#   - The only host-exposed ports are 80/443 (nginx) and 9090/3001 (monitoring).
+#   - All secrets are injected via environment variables — never hardcoded here.
+#   - read_only filesystems are used where the application allows it; tmpfs
+#     mounts are added for directories that need write access.
+#   - no-new-privileges prevents privilege escalation inside containers.
+#
+# Network topology:
+#   frontend_net  — nginx ↔ backend (HTTP proxy)
+#   backend_net   — backend/worker ↔ postgres/redis
+#   monitoring_net — prometheus ↔ all exporters + grafana
+#
+# Logging:
+#   All services use the json-file driver with rotation (10 MB × 5 files).
+#   Structured JSON logs from the FastAPI backend are parsed by log aggregators.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Shared environment anchors ────────────────────────────────────────────────
+x-backend-env: &backend-env
+  DATABASE_URL: "${DATABASE_URL}"
+  REDIS_URL: "${REDIS_URL}"
+  CELERY_BROKER_URL: "${CELERY_BROKER_URL}"
+  CELERY_RESULT_BACKEND: "${CELERY_RESULT_BACKEND}"
+  ENVIRONMENT: production
+  LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+  QUANTUM_TIMEOUT_SECONDS: "${QUANTUM_TIMEOUT_SECONDS:-60}"
+  MAX_QUANTUM_ASSETS: "${MAX_QUANTUM_ASSETS:-8}"
+  CACHE_TTL_SECONDS: "${CACHE_TTL_SECONDS:-3600}"
+  RISK_FREE_RATE: "${RISK_FREE_RATE:-0.02}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+  # CORS — restrict to your actual frontend domain
+  ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-https://portfolio-optimizer.example.com}"
+
+# ── Shared logging configuration ──────────────────────────────────────────────
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    # Tag logs with service name and container ID for log aggregation
+    tag: "{{.Name}}/{{.ID}}"
+
+# ── Shared security options ───────────────────────────────────────────────────
+x-security-opts: &security-opts
+  security_opt:
+    - no-new-privileges:true
+
+# ── Shared restart policy ─────────────────────────────────────────────────────
+x-restart: &restart-policy
+  restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Services
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  # Run history storage. Not exposed on the host network.
+  postgres:
+    image: postgres:16-alpine
+    <<: [*restart-policy, *security-opts]
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB:-portfolio_optimizer}"
+      # Tune for production workloads
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Custom PostgreSQL configuration for production tuning
+      - ./infra/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    # No host port binding — only accessible within backend_net
+    expose:
+      - "5432"
+    networks:
+      - backend_net
+      - monitoring_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-portfolio_optimizer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    # Postgres needs write access to its data directory; no read_only here
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c log_destination=stderr
+      -c logging_collector=off
+      -c log_min_duration_statement=1000
+      -c log_connections=off
+      -c log_disconnections=off
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  # Cache + Celery broker/backend. Not exposed on the host network.
+  redis:
+    image: redis:7-alpine
+    <<: [*restart-policy, *security-opts]
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass "${REDIS_PASSWORD}"
+      --loglevel warning
+      --protected-mode yes
+      --bind 0.0.0.0
+      --tcp-backlog 511
+      --timeout 300
+      --tcp-keepalive 60
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    networks:
+      - backend_net
+      - monitoring_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 640M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    # Redis needs write access to /data for AOF persistence
+    read_only: false
+    tmpfs:
+      - /tmp
+
+  # ── Backend (FastAPI) ────────────────────────────────────────────────────────
+  # Uvicorn with 4 workers. Runs migrations on startup.
+  backend:
+    image: "${BACKEND_IMAGE:-portfolio-optimizer-backend:latest}"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    <<: [*restart-policy, *security-opts]
+    environment:
+      <<: *backend-env
+    # Not exposed directly — nginx proxies to it
+    expose:
+      - "8000"
+    networks:
+      - frontend_net
+      - backend_net
+      - monitoring_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app
+             --host 0.0.0.0
+             --port 8000
+             --workers ${UVICORN_WORKERS:-4}
+             --loop uvloop
+             --http httptools
+             --no-access-log
+             --proxy-headers
+             --forwarded-allow-ips='*'"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+      replicas: 1
+    # Application code is baked into the image; no volume mounts in production
+    read_only: false
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # ── Celery Worker ────────────────────────────────────────────────────────────
+  # Handles long-running quantum optimization jobs asynchronously.
+  worker:
+    image: "${BACKEND_IMAGE:-portfolio-optimizer-backend:latest}"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    <<: [*restart-policy, *security-opts]
+    environment:
+      <<: *backend-env
+      # Celery-specific tuning
+      CELERY_WORKER_PREFETCH_MULTIPLIER: "1"
+      CELERY_TASK_ACKS_LATE: "true"
+    networks:
+      - backend_net
+      - monitoring_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.workers.celery_app worker
+      --loglevel=warning
+      --concurrency=${CELERY_DEFAULT_CONCURRENCY:-${CELERY_CONCURRENCY:-4}}
+      --queues=default
+      -n default-worker@%h
+      --max-tasks-per-child=100
+      --max-memory-per-child=512000
+      --without-gossip
+      --without-mingle
+      --without-heartbeat
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d default-worker@$$HOSTNAME"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+      replicas: ${CELERY_DEFAULT_REPLICAS:-1}
+    read_only: false
+    tmpfs:
+      - /tmp
+
+  # ── Celery Worker — quantum queue ──────────────────────────────────────────
+  # Dedicated worker for QAOA/VQE jobs. Isolated from the default queue so a
+  # slow quantum simulation never blocks classical runs. Concurrency is kept
+  # low because each task is CPU-bound; raise ``CELERY_QUANTUM_REPLICAS`` to
+  # scale out horizontally across hosts.
+  worker-quantum:
+    image: "${BACKEND_IMAGE:-portfolio-optimizer-backend:latest}"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    <<: [*restart-policy, *security-opts]
+    environment:
+      <<: *backend-env
+      CELERY_WORKER_PREFETCH_MULTIPLIER: "1"
+      CELERY_TASK_ACKS_LATE: "true"
+    networks:
+      - backend_net
+      - monitoring_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.workers.celery_app worker
+      --loglevel=warning
+      --concurrency=${CELERY_QUANTUM_CONCURRENCY:-2}
+      --queues=quantum
+      -n quantum-worker@%h
+      --max-tasks-per-child=50
+      --max-memory-per-child=1024000
+      --without-gossip
+      --without-mingle
+      --without-heartbeat
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d quantum-worker@$$HOSTNAME"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+      replicas: ${CELERY_QUANTUM_REPLICAS:-1}
+    read_only: false
+    tmpfs:
+      - /tmp
+
+
+  # ── Celery Beat (Periodic Task Scheduler) ──────────────────────────────────
+  # Runs periodic tasks (e.g., cache warming, cleanup). Only one instance
+  # should run at a time to avoid duplicate task scheduling.
+  celery-beat:
+    image: "${BACKEND_IMAGE:-portfolio-optimizer-backend:latest}"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    <<: [*restart-policy, *security-opts]
+    environment:
+      <<: *backend-env
+    networks:
+      - backend_net
+      - monitoring_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.workers.celery_app beat
+      --loglevel=warning
+      --scheduler celery.beat:PersistentScheduler
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+      replicas: 1
+    read_only: false
+    tmpfs:
+      - /tmp
+
+  # ── Nginx (Reverse Proxy + Static Assets) ────────────────────────────────────
+  # Serves the React SPA and proxies API/WebSocket requests to the backend.
+  # Handles TLS termination (configure certs via volume mounts or certbot).
+  nginx:
+    image: nginx:1.27-alpine
+    <<: [*restart-policy, *security-opts]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      # TLS certificates — mount from host or use certbot volume
+      - nginx_certs:/etc/nginx/certs:ro
+      # Pre-built frontend assets (copy from frontend build stage)
+      - frontend_dist:/usr/share/nginx/html:ro
+      # Nginx cache and temp directories
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - frontend_net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run
+      - /var/log/nginx
+
+  # ── Frontend Build (init container pattern) ──────────────────────────────────
+  # Builds the React app and copies dist/ to the shared frontend_dist volume.
+  # Runs once at startup; nginx serves the static files.
+  frontend-build:
+    image: "${FRONTEND_IMAGE:-portfolio-optimizer-frontend:latest}"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL:-https://portfolio-optimizer.example.com}"
+        VITE_WS_BASE_URL: "${VITE_WS_BASE_URL:-wss://portfolio-optimizer.example.com}"
+        BUILDKIT_INLINE_CACHE: "1"
+    volumes:
+      - frontend_dist:/dist-output
+    # Copy built assets to the shared volume then exit
+    entrypoint: ["sh", "-c", "cp -r /usr/share/nginx/html/. /dist-output/ && echo 'Frontend assets copied.'"]
+    networks: []
+    restart: "no"
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ── Redis Exporter ───────────────────────────────────────────────────────────
+  # Exposes Redis metrics for Prometheus scraping on port 9121.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0-alpine
+    <<: [*restart-policy, *security-opts]
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      REDIS_EXPORTER_LOG_FORMAT: json
+    expose:
+      - "9121"
+    networks:
+      - backend_net
+      - monitoring_net
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9121/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
+        reservations:
+          cpus: "0.01"
+          memory: 16M
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # ── PostgreSQL Exporter ──────────────────────────────────────────────────────
+  # Exposes PostgreSQL metrics for Prometheus scraping on port 9187.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    <<: [*restart-policy, *security-opts]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-portfolio_optimizer}?sslmode=disable"
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
+      PG_EXPORTER_INCLUDE_DATABASES: "${POSTGRES_DB:-portfolio_optimizer}"
+    expose:
+      - "9187"
+    networks:
+      - backend_net
+      - monitoring_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9187/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
+        reservations:
+          cpus: "0.01"
+          memory: 16M
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # ── Prometheus ───────────────────────────────────────────────────────────────
+  # Metrics collection and alerting. Exposed on host for Grafana access.
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    <<: [*restart-policy, *security-opts]
+    user: "65534:65534"  # nobody:nobody
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/prometheus_rules.yml:/etc/prometheus/rules/portfolio_optimizer.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}"
+      - "--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-10GB}"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.external-url=${PROMETHEUS_EXTERNAL_URL:-http://localhost:9090}"
+      - "--web.route-prefix=/"
+      # Restrict access to admin API — only accessible within monitoring_net
+      - "--web.listen-address=0.0.0.0:9090"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - monitoring_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+  # ── Alertmanager ─────────────────────────────────────────────────────────────
+  # Routes Prometheus alerts to notification channels (email, Slack, PagerDuty).
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    <<: [*restart-policy, *security-opts]
+    user: "65534:65534"  # nobody:nobody
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.external-url=${ALERTMANAGER_EXTERNAL_URL:-http://localhost:9093}"
+      - "--cluster.listen-address="  # Disable clustering for single-node setup
+      - "--log.level=warn"
+      - "--log.format=json"
+    expose:
+      - "9093"
+    networks:
+      - monitoring_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  # Dashboards and visualisation. Exposed on host for operator access.
+  grafana:
+    image: grafana/grafana:11.1.0
+    <<: [*restart-policy, *security-opts]
+    user: "472:472"  # grafana:grafana
+    environment:
+      # Security
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}"
+      GF_SECURITY_SECRET_KEY: "${GRAFANA_SECRET_KEY}"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: "strict"
+      GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
+      GF_SECURITY_X_CONTENT_TYPE_OPTIONS: "true"
+      GF_SECURITY_X_XSS_PROTECTION: "true"
+      # User management
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_USERS_AUTO_ASSIGN_ORG: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Viewer"
+      # Server
+      GF_SERVER_DOMAIN: "${GRAFANA_DOMAIN:-localhost}"
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3001}"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      # Analytics — disable telemetry
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # Logging
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: warn
+      GF_LOG_CONSOLE_FORMAT: json
+      # Alerting — point to Alertmanager
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+      GF_ALERTING_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    networks:
+      - monitoring_net
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  # nginx ↔ backend: HTTP proxy traffic
+  frontend_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "172.20.0.0/24"
+
+  # backend/worker ↔ postgres/redis: database and cache traffic
+  backend_net:
+    driver: bridge
+    internal: true  # No external internet access from this network
+    ipam:
+      config:
+        - subnet: "172.20.1.0/24"
+
+  # prometheus ↔ exporters ↔ grafana: metrics scraping
+  monitoring_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "172.20.2.0/24"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  # Persistent data volumes — use named volumes for easy backup/restore
+  postgres_data:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "PostgreSQL run history data"
+      com.portfolio-optimizer.backup: "required"
+
+  redis_data:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "Redis cache and Celery broker data"
+      com.portfolio-optimizer.backup: "optional"
+
+  prometheus_data:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "Prometheus TSDB metrics storage"
+      com.portfolio-optimizer.backup: "optional"
+
+  grafana_data:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "Grafana dashboards and user data"
+      com.portfolio-optimizer.backup: "optional"
+
+  alertmanager_data:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "Alertmanager silence and notification state"
+      com.portfolio-optimizer.backup: "optional"
+
+  # Ephemeral volumes for inter-service file sharing
+  frontend_dist:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "Built React SPA static assets"
+
+  nginx_certs:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "TLS certificates for nginx"
+
+  nginx_cache:
+    driver: local
+    labels:
+      com.portfolio-optimizer.description: "Nginx proxy cache"

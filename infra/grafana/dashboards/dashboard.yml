@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Grafana Dashboard Provisioning — Portfolio Optimizer
+#
+# This file is mounted at /etc/grafana/provisioning/dashboards/dashboard.yml
+# inside the Grafana container. Grafana reads it on startup and automatically
+# loads all JSON dashboard files from the configured folder path.
+#
+# Dashboard JSON files placed in /etc/grafana/provisioning/dashboards/
+# (i.e., the same directory as this config file) are loaded automatically.
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+providers:
+  - name: "Portfolio Optimizer Dashboards"
+    # Unique provider identifier
+    orgId: 1
+    # Dashboard folder name shown in the Grafana UI
+    folder: "Portfolio Optimizer"
+    # Folder UID for stable URL references
+    folderUid: "portfolio-optimizer"
+    type: file
+    # Disable deletion of provisioned dashboards from the UI
+    disableDeletion: true
+    # Allow Grafana to update dashboards when the JSON files change on disk
+    updateIntervalSeconds: 30
+    # Allow editors to modify provisioned dashboards (changes are not persisted
+    # back to disk — they are overwritten on the next reload)
+    allowUiUpdates: false
+    options:
+      # Path inside the container where dashboard JSON files are stored.
+      # This matches the volume mount in docker-compose.prod.yml:
+      #   ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      path: /etc/grafana/provisioning/dashboards
+      # Recursively scan subdirectories for dashboard JSON files
+      foldersFromFilesStructure: false

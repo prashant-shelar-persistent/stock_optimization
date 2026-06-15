@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Grafana Datasource Provisioning — Prometheus
+#
+# Canonical location: infra/monitoring/grafana/datasources/prometheus.yml
+#
+# Mount this file into the Grafana container at:
+#   /etc/grafana/provisioning/datasources/prometheus.yml
+#
+# Grafana reads all files in /etc/grafana/provisioning/datasources/ on startup
+# and automatically creates or updates the listed datasources. No manual UI
+# configuration is required.
+#
+# The datasource UID "prometheus-portfolio-optimizer" is referenced by all
+# dashboard panels in portfolio_optimizer.json. Do not change it without
+# updating the dashboard JSON.
+#
+# Reference:
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+# Datasources to insert or update on Grafana startup.
+# An existing datasource with the same name is updated in-place.
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # Mark as the default datasource so new panels use it automatically
+    isDefault: true
+    # "proxy" means Grafana's backend proxies requests to Prometheus.
+    # This keeps Prometheus off the public internet.
+    access: proxy
+    # Prometheus is reachable at this address from within the Docker network.
+    # In production the service name matches the docker-compose service name.
+    url: http://prometheus:9090
+    # Stable UID referenced by all dashboard panel datasource fields.
+    # Changing this UID requires updating every panel in portfolio_optimizer.json.
+    uid: "prometheus-portfolio-optimizer"
+    # Prevent operators from accidentally deleting this datasource via the UI.
+    editable: false
+    jsonData:
+      # Use POST for queries — required for large label sets and long queries
+      httpMethod: POST
+      # Align time ranges to the scrape interval for cleaner step alignment
+      timeInterval: "15s"
+      # Query timeout — long enough for complex recording-rule queries
+      queryTimeout: "60s"
+      # Prometheus HTTP API version (v1 is compatible with Prometheus 2.x+)
+      prometheusVersion: "2.53.0"
+      # Disable TLS verification for internal Docker network communication.
+      # Enable and configure tlsAuth for production deployments with TLS.
+      tlsSkipVerify: false
+      # Exemplar support — set destinations if Tempo/Jaeger is deployed
+      exemplarTraceIdDestinations: []
+      # Increment query step when zooming out to avoid browser memory pressure
+      incrementalQuerying: true
+      incrementalQueryOverlapWindow: "10m"

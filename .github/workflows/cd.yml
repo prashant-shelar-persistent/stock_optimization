@@ -1,0 +1,649 @@
+################################################################################
+# Portfolio Optimizer — Continuous Deployment Workflow
+#
+# Triggers:
+#   - Push to `main` branch (production deploy)
+#   - Push to `develop` branch (staging deploy)
+#   - Manual workflow_dispatch with environment selector
+#
+# Deployment flow:
+#   1. Determine target environment (production | staging)
+#   2. Build & push Docker images to AWS ECR (backend, worker, frontend)
+#   3. Run database migrations via ECS one-off task
+#   4. Deploy to ECS Fargate (rolling update — force new deployment)
+#   5. Wait for ECS services to stabilize
+#   6. Run post-deploy smoke test against the ALB endpoint
+#   7. Notify on success / failure
+#
+# Authentication:
+#   Uses GitHub OIDC → AWS IAM role (no long-lived AWS credentials stored).
+#   The IAM role must trust the GitHub OIDC provider and have permissions for:
+#     - ECR: GetAuthorizationToken, BatchCheckLayerAvailability, PutImage, etc.
+#     - ECS: UpdateService, DescribeServices, RunTask, DescribeTaskDefinition
+#     - IAM: PassRole (for ECS task execution role)
+#     - Logs: GetLogEvents (for migration task log tailing)
+#
+# Required GitHub Secrets:
+#   AWS_ACCOUNT_ID          — 12-digit AWS account ID
+#   AWS_REGION              — e.g. us-east-1
+#   AWS_DEPLOY_ROLE_ARN     — IAM role ARN for OIDC-based deployment
+#   PRODUCTION_ALB_URL      — https://portfolio-optimizer.example.com
+#   STAGING_ALB_URL         — https://staging.portfolio-optimizer.example.com
+#
+# Required GitHub Variables (repository-level):
+#   ECS_CLUSTER_NAME        — e.g. portfolio-optimizer-production-cluster
+#   ECS_BACKEND_SERVICE     — e.g. portfolio-optimizer-production-backend
+#   ECS_WORKER_SERVICE      — e.g. portfolio-optimizer-production-worker
+#   ECS_FRONTEND_SERVICE    — e.g. portfolio-optimizer-production-frontend
+#   ECS_MIGRATION_TASK_DEF  — e.g. portfolio-optimizer-production-migration
+#   ECS_SUBNET_IDS          — comma-separated private subnet IDs for migration task
+#   ECS_SECURITY_GROUP_ID   — security group ID for migration task
+#   ECR_REGISTRY            — e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com
+################################################################################
+
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target deployment environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      image_tag:
+        description: "Docker image tag to deploy (default: git SHA)"
+        required: false
+        type: string
+
+# Only one deployment per environment at a time
+concurrency:
+  group: cd-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Resolve deployment context
+  # ─────────────────────────────────────────────────────────────────────────────
+  resolve-context:
+    name: "Resolve Deployment Context"
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.ctx.outputs.environment }}
+      image_tag: ${{ steps.ctx.outputs.image_tag }}
+      alb_url: ${{ steps.ctx.outputs.alb_url }}
+      ecr_registry: ${{ steps.ctx.outputs.ecr_registry }}
+
+    steps:
+      - name: Determine environment and image tag
+        id: ctx
+        run: |
+          # Determine environment
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            ENV="production"
+          else
+            ENV="staging"
+          fi
+
+          # Determine image tag
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.image_tag }}" ]]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          else
+            TAG="${{ github.sha }}"
+          fi
+
+          # Short SHA for human-readable tags
+          SHORT_SHA="${TAG:0:8}"
+
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          # ALB URL depends on environment
+          if [[ "$ENV" == "production" ]]; then
+            echo "alb_url=${{ secrets.PRODUCTION_ALB_URL }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "alb_url=${{ secrets.STAGING_ALB_URL }}" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "ecr_registry=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com" >> "$GITHUB_OUTPUT"
+
+          echo "Deploying to: $ENV"
+          echo "Image tag: $TAG"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build & push Docker images to ECR
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Pre-flight: Run tests before building Docker images
+  # Ensures no Docker build or deployment occurs when tests fail (fail-fast gate)
+  # ─────────────────────────────────────────────────────────────────────────────
+  run-tests:
+    name: "Pre-flight: Run Tests (fail-fast gate)"
+    runs-on: ubuntu-latest
+    needs: resolve-context
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run backend tests (fail-fast)
+        run: |
+          pytest ../tests/ \
+            --tb=short \
+            -q \
+            --ignore=../tests/e2e \
+            -m "not e2e and not load" \
+            -x
+        env:
+          ENVIRONMENT: testing
+          LOG_LEVEL: WARNING
+          QUANTUM_TIMEOUT_SECONDS: "30"
+          MAX_QUANTUM_ASSETS: "4"
+          CACHE_TTL_SECONDS: "60"
+          RISK_FREE_RATE: "0.02"
+          OPENAI_API_KEY: "sk-test-placeholder-for-ci"
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests (fail-fast)
+        working-directory: frontend
+        run: npm test
+
+  build-and-push:
+    name: "Build & Push Images to ECR"
+    runs-on: ubuntu-latest
+    needs: [resolve-context, run-tests]
+    environment: ${{ needs.resolve-context.outputs.environment }}
+
+    permissions:
+      id-token: write   # Required for OIDC authentication
+      contents: read
+
+    outputs:
+      backend_image: ${{ steps.meta-backend.outputs.tags }}
+      worker_image: ${{ steps.meta-worker.outputs.tags }}
+      frontend_image: ${{ steps.meta-frontend.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-session-name: GitHubActions-CD-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Backend image ────────────────────────────────────────────────────────
+      - name: Extract backend image metadata
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.resolve-context.outputs.ecr_registry }}/portfolio-optimizer-${{ needs.resolve-context.outputs.environment }}-backend
+          tags: |
+            type=sha,prefix=,format=long
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=${{ needs.resolve-context.outputs.environment }}-latest
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha,scope=backend-prod
+          cache-to: type=gha,mode=max,scope=backend-prod
+          provenance: false
+
+      # ── Worker image (same Dockerfile, same target — separate tag) ───────────
+      - name: Extract worker image metadata
+        id: meta-worker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.resolve-context.outputs.ecr_registry }}/portfolio-optimizer-${{ needs.resolve-context.outputs.environment }}-worker
+          tags: |
+            type=sha,prefix=,format=long
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=${{ needs.resolve-context.outputs.environment }}-latest
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta-worker.outputs.tags }}
+          labels: ${{ steps.meta-worker.outputs.labels }}
+          cache-from: type=gha,scope=backend-prod
+          cache-to: type=gha,mode=max,scope=backend-prod
+          provenance: false
+
+      # ── Frontend image ───────────────────────────────────────────────────────
+      - name: Extract frontend image metadata
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.resolve-context.outputs.ecr_registry }}/portfolio-optimizer-${{ needs.resolve-context.outputs.environment }}-frontend
+          tags: |
+            type=sha,prefix=,format=long
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=${{ needs.resolve-context.outputs.environment }}-latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            VITE_API_BASE_URL=${{ needs.resolve-context.outputs.alb_url }}
+            VITE_WS_BASE_URL=${{ needs.resolve-context.outputs.alb_url != '' && replace(needs.resolve-context.outputs.alb_url, 'https://', 'wss://') || 'wss://api.portfolio-optimizer.example.com' }}
+          cache-from: type=gha,scope=frontend-prod
+          cache-to: type=gha,mode=max,scope=frontend-prod
+          provenance: false
+
+      - name: Output image URIs
+        run: |
+          echo "### Docker Images Built & Pushed 🐳" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service | Image URI |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|-----------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend | \`${{ needs.resolve-context.outputs.ecr_registry }}/portfolio-optimizer-${{ needs.resolve-context.outputs.environment }}-backend:${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Worker  | \`${{ needs.resolve-context.outputs.ecr_registry }}/portfolio-optimizer-${{ needs.resolve-context.outputs.environment }}-worker:${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Frontend| \`${{ needs.resolve-context.outputs.ecr_registry }}/portfolio-optimizer-${{ needs.resolve-context.outputs.environment }}-frontend:${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Run database migrations via ECS one-off task
+  # ─────────────────────────────────────────────────────────────────────────────
+  run-migrations:
+    name: "Run Database Migrations"
+    runs-on: ubuntu-latest
+    needs: [resolve-context, build-and-push]
+    environment: ${{ needs.resolve-context.outputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-session-name: GitHubActions-Migrate-${{ github.run_id }}
+
+      - name: Get latest backend task definition ARN
+        id: get-task-def
+        run: |
+          # Fetch the latest active revision of the backend task definition
+          TASK_DEF_ARN=$(aws ecs describe-task-definition \
+            --task-definition "${{ vars.ECS_MIGRATION_TASK_DEF }}" \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text 2>/dev/null || echo "")
+
+          if [[ -z "$TASK_DEF_ARN" ]]; then
+            # Fall back to backend task definition if dedicated migration task def doesn't exist
+            TASK_DEF_ARN=$(aws ecs describe-task-definition \
+              --task-definition "${{ vars.ECS_BACKEND_SERVICE }}" \
+              --query "taskDefinition.taskDefinitionArn" \
+              --output text)
+          fi
+
+          echo "task_def_arn=$TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+          echo "Using task definition: $TASK_DEF_ARN"
+
+      - name: Run Alembic migration task
+        id: run-migration
+        run: |
+          # Launch a one-off ECS task that runs `alembic upgrade head`
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --task-definition "${{ steps.get-task-def.outputs.task_def_arn }}" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.ECS_SUBNET_IDS }}],securityGroups=[${{ vars.ECS_SECURITY_GROUP_ID }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"backend","command":["alembic","upgrade","head"]}]}' \
+            --query "tasks[0].taskArn" \
+            --output text)
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "Migration task ARN: $TASK_ARN"
+
+      - name: Wait for migration task to complete
+        run: |
+          echo "Waiting for migration task to complete..."
+          aws ecs wait tasks-stopped \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --tasks "${{ steps.run-migration.outputs.task_arn }}"
+
+          # Check exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --tasks "${{ steps.run-migration.outputs.task_arn }}" \
+            --query "tasks[0].containers[0].exitCode" \
+            --output text)
+
+          echo "Migration task exit code: $EXIT_CODE"
+
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "❌ Migration task failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          echo "✅ Database migrations completed successfully"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Deploy to ECS Fargate (rolling update)
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy-ecs:
+    name: "Deploy to ECS (${{ needs.resolve-context.outputs.environment }})"
+    runs-on: ubuntu-latest
+    needs: [resolve-context, build-and-push, run-migrations]
+    environment: ${{ needs.resolve-context.outputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-session-name: GitHubActions-Deploy-${{ github.run_id }}
+
+      - name: Update backend ECS service
+        run: |
+          echo "Forcing new deployment for backend service..."
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --service "${{ vars.ECS_BACKEND_SERVICE }}" \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Update worker ECS service
+        run: |
+          echo "Forcing new deployment for worker service..."
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --service "${{ vars.ECS_WORKER_SERVICE }}" \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Update frontend ECS service
+        run: |
+          echo "Forcing new deployment for frontend service..."
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --service "${{ vars.ECS_FRONTEND_SERVICE }}" \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Wait for backend service to stabilize
+        run: |
+          echo "Waiting for backend service to reach steady state (timeout: 10 min)..."
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --services "${{ vars.ECS_BACKEND_SERVICE }}"
+          echo "✅ Backend service is stable"
+
+      - name: Wait for worker service to stabilize
+        run: |
+          echo "Waiting for worker service to reach steady state (timeout: 10 min)..."
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --services "${{ vars.ECS_WORKER_SERVICE }}"
+          echo "✅ Worker service is stable"
+
+      - name: Wait for frontend service to stabilize
+        run: |
+          echo "Waiting for frontend service to reach steady state (timeout: 10 min)..."
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --services "${{ vars.ECS_FRONTEND_SERVICE }}"
+          echo "✅ Frontend service is stable"
+
+      - name: Describe deployed services
+        run: |
+          echo "### ECS Service Deployment Summary 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Environment:** ${{ needs.resolve-context.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Cluster:** ${{ vars.ECS_CLUSTER_NAME }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          for SERVICE in "${{ vars.ECS_BACKEND_SERVICE }}" "${{ vars.ECS_WORKER_SERVICE }}" "${{ vars.ECS_FRONTEND_SERVICE }}"; do
+            RUNNING=$(aws ecs describe-services \
+              --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+              --services "$SERVICE" \
+              --query "services[0].runningCount" \
+              --output text)
+            DESIRED=$(aws ecs describe-services \
+              --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+              --services "$SERVICE" \
+              --query "services[0].desiredCount" \
+              --output text)
+            echo "| $SERVICE | $RUNNING/$DESIRED tasks running |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Post-deploy smoke test
+  # ─────────────────────────────────────────────────────────────────────────────
+  smoke-test:
+    name: "Post-Deploy Smoke Test"
+    runs-on: ubuntu-latest
+    needs: [resolve-context, deploy-ecs]
+    environment: ${{ needs.resolve-context.outputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install smoke test dependencies
+        run: pip install httpx pytest
+
+      - name: Wait for ALB to be ready
+        run: |
+          ALB_URL="${{ needs.resolve-context.outputs.alb_url }}"
+          echo "Waiting for $ALB_URL/health to respond..."
+
+          MAX_RETRIES=20
+          RETRY_INTERVAL=15
+          ATTEMPT=0
+
+          while [[ $ATTEMPT -lt $MAX_RETRIES ]]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 10 \
+              --retry 0 \
+              "$ALB_URL/health" 2>/dev/null || echo "000")
+
+            if [[ "$HTTP_STATUS" == "200" ]]; then
+              echo "✅ Health endpoint responded with 200 (attempt $ATTEMPT)"
+              break
+            fi
+
+            echo "Attempt $ATTEMPT/$MAX_RETRIES: Got HTTP $HTTP_STATUS, retrying in ${RETRY_INTERVAL}s..."
+            sleep $RETRY_INTERVAL
+          done
+
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "❌ Health endpoint did not respond with 200 after $MAX_RETRIES attempts"
+            exit 1
+          fi
+
+      - name: Run smoke tests
+        env:
+          SMOKE_TEST_BASE_URL: ${{ needs.resolve-context.outputs.alb_url }}
+        run: |
+          python tests/e2e/smoke_test.py
+        continue-on-error: false
+
+      - name: Verify Prometheus metrics endpoint
+        run: |
+          ALB_URL="${{ needs.resolve-context.outputs.alb_url }}"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$ALB_URL/metrics")
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "✅ /metrics endpoint is accessible"
+          else
+            echo "⚠️  /metrics endpoint returned HTTP $HTTP_STATUS (non-blocking)"
+          fi
+        continue-on-error: true
+
+      - name: Post smoke test summary
+        if: always()
+        run: |
+          echo "### Post-Deploy Smoke Test Results 🔍" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Target URL:** ${{ needs.resolve-context.outputs.alb_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Environment:** ${{ needs.resolve-context.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Notify on deployment outcome
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify:
+    name: "Deployment Notification"
+    runs-on: ubuntu-latest
+    needs: [resolve-context, build-and-push, run-migrations, deploy-ecs, smoke-test]
+    if: always()
+
+    steps:
+      - name: Determine overall deployment status
+        id: status
+        run: |
+          # Aggregate results from all deployment jobs
+          BUILD_RESULT="${{ needs.build-and-push.result }}"
+          MIGRATE_RESULT="${{ needs.run-migrations.result }}"
+          DEPLOY_RESULT="${{ needs.deploy-ecs.result }}"
+          SMOKE_RESULT="${{ needs.smoke-test.result }}"
+
+          if [[ "$BUILD_RESULT" == "success" && \
+                "$MIGRATE_RESULT" == "success" && \
+                "$DEPLOY_RESULT" == "success" && \
+                "$SMOKE_RESULT" == "success" ]]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "emoji=✅" >> "$GITHUB_OUTPUT"
+            echo "message=Deployment succeeded" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+            echo "emoji=❌" >> "$GITHUB_OUTPUT"
+            echo "message=Deployment failed (build=$BUILD_RESULT, migrate=$MIGRATE_RESULT, deploy=$DEPLOY_RESULT, smoke=$SMOKE_RESULT)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write deployment summary
+        run: |
+          echo "## Deployment Summary ${{ steps.status.outputs.emoji }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ steps.status.outputs.message }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | ${{ needs.resolve-context.outputs.environment }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Actor | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| URL | ${{ needs.resolve-context.outputs.alb_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Job Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build & Push | ${{ needs.build-and-push.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run Migrations | ${{ needs.run-migrations.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deploy ECS | ${{ needs.deploy-ecs.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Smoke Test | ${{ needs.smoke-test.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      # Optional: Post to Slack if SLACK_WEBHOOK_URL secret is configured
+      - name: Post Slack notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "${{ steps.status.outputs.emoji }} *Portfolio Optimizer* — ${{ steps.status.outputs.message }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ steps.status.outputs.emoji }} *Portfolio Optimizer Deployment*\n*Environment:* ${{ needs.resolve-context.outputs.environment }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* `${{ github.sha }}`\n*Actor:* ${{ github.actor }}\n*Status:* ${{ steps.status.outputs.message }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": { "type": "plain_text", "text": "View Run" },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true

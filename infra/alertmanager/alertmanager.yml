@@ -1,0 +1,279 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Alertmanager Configuration — Portfolio Optimizer
+#
+# Canonical location: infra/alertmanager/alertmanager.yml
+#
+# Mount this file into the Alertmanager container at:
+#   /etc/alertmanager/alertmanager.yml
+#
+# This configuration:
+#   - Routes critical alerts to PagerDuty (immediate paging)
+#   - Routes all alerts to Slack (visibility)
+#   - Routes all alerts to email (audit trail)
+#   - Groups related alerts to reduce notification noise
+#   - Inhibits lower-severity alerts when higher-severity ones are firing
+#   - Silences alerts during maintenance windows (via the Alertmanager UI)
+#
+# Environment variables referenced here must be set in the container
+# environment (see docker-compose.prod.yml and .env.prod.example):
+#   ALERTMANAGER_SLACK_WEBHOOK_URL
+#   ALERTMANAGER_SLACK_CHANNEL
+#   ALERTMANAGER_PAGERDUTY_SERVICE_KEY
+#   ALERTMANAGER_SMTP_HOST
+#   ALERTMANAGER_SMTP_FROM
+#   ALERTMANAGER_SMTP_USERNAME
+#   ALERTMANAGER_SMTP_PASSWORD
+#   ALERTMANAGER_EMAIL_TO
+#
+# Reference: https://prometheus.io/docs/alerting/latest/configuration/
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Global defaults ───────────────────────────────────────────────────────────
+global:
+  # How long to wait before sending a resolved notification after an alert
+  # has been resolved (gives time for flapping alerts to stabilise).
+  resolve_timeout: 5m
+
+  # SMTP settings for email notifications
+  smtp_smarthost: "${ALERTMANAGER_SMTP_HOST:-smtp.example.com:587}"
+  smtp_from: "${ALERTMANAGER_SMTP_FROM:-alerts@portfolio-optimizer.example.com}"
+  smtp_auth_username: "${ALERTMANAGER_SMTP_USERNAME:-alerts@portfolio-optimizer.example.com}"
+  smtp_auth_password: "${ALERTMANAGER_SMTP_PASSWORD}"
+  smtp_require_tls: true
+
+  # Slack API URL (used as fallback if not set per-receiver)
+  slack_api_url: "${ALERTMANAGER_SLACK_WEBHOOK_URL}"
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+# Custom notification templates for richer alert messages.
+# Template files are loaded from this directory.
+templates:
+  - "/etc/alertmanager/templates/*.tmpl"
+
+# ── Routing tree ─────────────────────────────────────────────────────────────
+# Alerts flow from the root route down to the first matching child route.
+# Unmatched alerts fall through to the root receiver (catch-all).
+route:
+  # ── Root route (catch-all) ────────────────────────────────────────────────
+  # All alerts that don't match a child route are sent here.
+  receiver: "slack-notifications"
+
+  # Group alerts by alertname + environment to reduce noise.
+  # Alerts with the same group_by labels are batched into a single notification.
+  group_by: ["alertname", "environment", "severity"]
+
+  # Wait this long before sending the first notification for a new group.
+  # Allows related alerts to be batched together.
+  group_wait: 30s
+
+  # Wait this long before sending a notification about new alerts added to
+  # an already-firing group.
+  group_interval: 5m
+
+  # Wait this long before re-sending a notification for an already-firing alert.
+  repeat_interval: 4h
+
+  # ── Child routes ──────────────────────────────────────────────────────────
+  routes:
+
+    # ── Critical alerts → PagerDuty + Slack ──────────────────────────────────
+    # Critical alerts require immediate human attention and page on-call.
+    - match:
+        severity: critical
+      receiver: "pagerduty-critical"
+      # Also send to Slack for visibility
+      continue: true
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+
+    # ── Critical alerts → Slack (continued from above) ────────────────────────
+    - match:
+        severity: critical
+      receiver: "slack-critical"
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+
+    # ── Warning alerts → Slack ────────────────────────────────────────────────
+    # Warning alerts are sent to Slack but do not page on-call.
+    - match:
+        severity: warning
+      receiver: "slack-warnings"
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 6h
+
+    # ── Service down alerts → email + Slack ───────────────────────────────────
+    # Service availability alerts get email notifications for audit trail.
+    - match_re:
+        alertname: "(BackendDown|RedisDown|PostgresDown|CeleryWorkerDown)"
+      receiver: "email-oncall"
+      continue: true
+      group_wait: 10s
+      repeat_interval: 30m
+
+    # ── Watchdog (always-firing heartbeat) ────────────────────────────────────
+    # The Watchdog alert fires continuously to confirm the alerting pipeline
+    # is working. Route it to a dedicated receiver that does nothing.
+    - match:
+        alertname: Watchdog
+      receiver: "null"
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 10m
+
+    # ── Info alerts → null (suppress) ────────────────────────────────────────
+    - match:
+        severity: info
+      receiver: "null"
+
+# ── Inhibition rules ─────────────────────────────────────────────────────────
+# Inhibit lower-severity alerts when a higher-severity alert is already firing
+# for the same service. This prevents alert storms when a service goes down.
+inhibit_rules:
+
+  # If BackendDown (critical) is firing, suppress all other backend alerts
+  - source_match:
+      alertname: BackendDown
+      severity: critical
+    target_match_re:
+      alertname: "(HighErrorRate5xxWarning|HighErrorRate5xxCritical|HighLatencyWarning|HighLatencyCritical)"
+    equal: ["environment"]
+
+  # If RedisDown (critical) is firing, suppress Redis memory alerts
+  - source_match:
+      alertname: RedisDown
+      severity: critical
+    target_match_re:
+      alertname: "(RedisMemoryWarning|RedisMemoryCritical)"
+    equal: ["environment"]
+
+  # If PostgresDown (critical) is firing, suppress PostgreSQL connection alerts
+  - source_match:
+      alertname: PostgresDown
+      severity: critical
+    target_match_re:
+      alertname: "(PostgresConnectionsWarning|PostgresConnectionsCritical)"
+    equal: ["environment"]
+
+  # Suppress warning-severity alerts when a critical alert for the same
+  # alertname is already firing (e.g., HighErrorRate5xxCritical suppresses
+  # HighErrorRate5xxWarning).
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ["alertname", "environment"]
+
+# ── Receivers ─────────────────────────────────────────────────────────────────
+receivers:
+
+  # ── Null receiver (suppress alerts) ──────────────────────────────────────────
+  - name: "null"
+
+  # ── Slack: all notifications (catch-all) ─────────────────────────────────────
+  - name: "slack-notifications"
+    slack_configs:
+      - api_url: "${ALERTMANAGER_SLACK_WEBHOOK_URL}"
+        channel: "${ALERTMANAGER_SLACK_CHANNEL:-#alerts-portfolio-optimizer}"
+        send_resolved: true
+        username: "Alertmanager"
+        icon_emoji: ":bell:"
+        title: |-
+          [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+        text: |-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Severity:* {{ .Labels.severity }}
+          *Environment:* {{ .Labels.environment }}
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}*Runbook:* {{ .Annotations.runbook_url }}{{ end }}
+          *Started:* {{ .StartsAt | since }}
+          {{ end }}
+        # Colour-code by severity
+        color: |-
+          {{ if eq .Status "resolved" }}good{{ else if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}#439FE0{{ end }}
+
+  # ── Slack: critical alerts ────────────────────────────────────────────────────
+  - name: "slack-critical"
+    slack_configs:
+      - api_url: "${ALERTMANAGER_SLACK_WEBHOOK_URL}"
+        channel: "${ALERTMANAGER_SLACK_CHANNEL:-#alerts-portfolio-optimizer}"
+        send_resolved: true
+        username: "Alertmanager"
+        icon_emoji: ":rotating_light:"
+        title: |-
+          :rotating_light: [CRITICAL{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+        text: |-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Severity:* CRITICAL
+          *Environment:* {{ .Labels.environment }}
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}*Runbook:* {{ .Annotations.runbook_url }}{{ end }}
+          *Started:* {{ .StartsAt | since }}
+          {{ end }}
+        color: "danger"
+
+  # ── Slack: warning alerts ─────────────────────────────────────────────────────
+  - name: "slack-warnings"
+    slack_configs:
+      - api_url: "${ALERTMANAGER_SLACK_WEBHOOK_URL}"
+        channel: "${ALERTMANAGER_SLACK_CHANNEL:-#alerts-portfolio-optimizer}"
+        send_resolved: true
+        username: "Alertmanager"
+        icon_emoji: ":warning:"
+        title: |-
+          :warning: [WARNING{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+        text: |-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Severity:* WARNING
+          *Environment:* {{ .Labels.environment }}
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}*Runbook:* {{ .Annotations.runbook_url }}{{ end }}
+          *Started:* {{ .StartsAt | since }}
+          {{ end }}
+        color: "warning"
+
+  # ── PagerDuty: critical alerts ────────────────────────────────────────────────
+  - name: "pagerduty-critical"
+    pagerduty_configs:
+      - service_key: "${ALERTMANAGER_PAGERDUTY_SERVICE_KEY}"
+        send_resolved: true
+        description: |-
+          {{ .CommonAnnotations.summary }}
+        details:
+          environment: "{{ .CommonLabels.environment }}"
+          severity: "{{ .CommonLabels.severity }}"
+          description: "{{ .CommonAnnotations.description }}"
+          runbook_url: "{{ .CommonAnnotations.runbook_url }}"
+          num_firing: "{{ .Alerts.Firing | len }}"
+        # PagerDuty severity mapping
+        severity: |-
+          {{ if eq .CommonLabels.severity "critical" }}critical{{ else }}warning{{ end }}
+
+  # ── Email: on-call notifications ──────────────────────────────────────────────
+  - name: "email-oncall"
+    email_configs:
+      - to: "${ALERTMANAGER_EMAIL_TO:-oncall@portfolio-optimizer.example.com}"
+        send_resolved: true
+        headers:
+          Subject: |-
+            [{{ .Status | toUpper }}] Portfolio Optimizer: {{ .CommonLabels.alertname }}
+        html: |-
+          <h2>{{ .CommonLabels.alertname }}</h2>
+          <p><strong>Status:</strong> {{ .Status | toUpper }}</p>
+          <p><strong>Environment:</strong> {{ .CommonLabels.environment }}</p>
+          <p><strong>Severity:</strong> {{ .CommonLabels.severity }}</p>
+          <hr>
+          {{ range .Alerts }}
+          <h3>{{ .Annotations.summary }}</h3>
+          <p>{{ .Annotations.description }}</p>
+          {{ if .Annotations.runbook_url }}
+          <p><a href="{{ .Annotations.runbook_url }}">Runbook</a></p>
+          {{ end }}
+          <p><strong>Started:</strong> {{ .StartsAt }}</p>
+          {{ if eq .Status "resolved" }}<p><strong>Resolved:</strong> {{ .EndsAt }}</p>{{ end }}
+          {{ end }}

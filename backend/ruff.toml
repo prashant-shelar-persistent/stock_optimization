@@ -1,0 +1,252 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Ruff configuration for the Portfolio Optimizer backend
+#
+# Ruff is used as both a linter (replacing flake8, isort, pyupgrade, etc.)
+# and a formatter (replacing black). All rules are tuned for a Python 3.11
+# FastAPI / async codebase with Pydantic v2, NumPy, and LangGraph.
+#
+# Run:
+#   ruff check .          — lint
+#   ruff check . --fix    — lint + auto-fix
+#   ruff format .         — format (black-compatible)
+#   ruff format . --check — format check (CI)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Target & paths ────────────────────────────────────────────────────────────
+target-version = "py311"
+
+# Directories to lint/format. Ruff respects .gitignore automatically.
+include = ["app/**/*.py", "tests/**/*.py", "alembic/**/*.py"]
+
+# Paths to exclude from all checks.
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "alembic/versions",   # auto-generated migration scripts
+]
+
+# Maximum line length (matches formatter setting below).
+line-length = 100
+
+# ── Linter ────────────────────────────────────────────────────────────────────
+[lint]
+# Rule sets to enable.
+# E/W  — pycodestyle errors and warnings
+# F    — Pyflakes (undefined names, unused imports, etc.)
+# I    — isort (import ordering)
+# N    — pep8-naming
+# UP   — pyupgrade (modern Python syntax)
+# B    — flake8-bugbear (likely bugs and design issues)
+# C4   — flake8-comprehensions (unnecessary comprehensions)
+# SIM  — flake8-simplify (simplifiable code patterns)
+# ANN  — flake8-annotations (type annotation enforcement)
+# ASYNC— flake8-async (async/await best practices)
+# PLC  — Pylint convention
+# PLE  — Pylint error
+# PLR  — Pylint refactor
+# PLW  — Pylint warning
+# RUF  — Ruff-specific rules
+# TID  — flake8-tidy-imports
+# PTH  — flake8-use-pathlib
+# ERA  — eradicate (commented-out code)
+# T20  — flake8-print (no bare print statements in production code)
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+    "ANN",
+    "ASYNC",
+    "PLC",
+    "PLE",
+    "PLR",
+    "PLW",
+    "RUF",
+    "TID",
+    "PTH",
+    "ERA",
+    "T20",
+]
+
+# Rules to ignore globally.
+ignore = [
+    # ── Type annotation relaxations ──────────────────────────────────────────
+    # ANN101/ANN102: missing type annotation for `self`/`cls` — not required
+    "ANN101",
+    "ANN102",
+    # ANN401: dynamically typed expressions (Any) are allowed in this codebase
+    # because LangGraph state, CVXPY results, and JSON payloads use Any heavily.
+    "ANN401",
+
+    # ── Style / formatting conflicts ─────────────────────────────────────────
+    # E501: line too long — handled by the formatter, not the linter
+    "E501",
+    # W-series: line break rules — handled by formatter
+
+    # ── Pylint relaxations ───────────────────────────────────────────────────
+    # PLR0913: too many arguments — FastAPI route handlers and optimizer
+    # functions legitimately have many parameters.
+    "PLR0913",
+    # PLR2004: magic value comparison — acceptable in numeric/scientific code
+    "PLR2004",
+    # PLR0912: too many branches — complex optimization logic is acceptable
+    "PLR0912",
+    # PLR0915: too many statements — complex solver functions are acceptable
+    "PLR0915",
+
+    # ── Bugbear relaxations ──────────────────────────────────────────────────
+    # B008: do not perform function calls in default arguments — FastAPI's
+    # Depends() pattern requires this (e.g. `dep: X = Depends(get_x)`).
+    "B008",
+    # B904: raise from — not always applicable in exception handlers
+    "B904",
+
+    # ── Print statements ─────────────────────────────────────────────────────
+    # T201: allow print in scripts/CLI entry points; structlog is used in app
+    # code but some utility scripts may use print.
+    # Uncomment to enforce no-print in all files:
+    # "T201",
+
+    # ── Path / import relaxations ────────────────────────────────────────────
+    # PTH123: open() vs Path.open() — acceptable in this codebase
+    "PTH123",
+
+    # ── Simplify relaxations ─────────────────────────────────────────────────
+    # SIM108: ternary operator — sometimes explicit if/else is clearer
+    "SIM108",
+
+    # ── ERA relaxations ──────────────────────────────────────────────────────
+    # ERA001: commented-out code — allow in quantum/experimental sections
+    "ERA001",
+]
+
+# Per-file rule overrides.
+[lint.per-file-ignores]
+# Test files: relax annotation requirements, allow assert statements,
+# allow magic values, and allow long functions.
+"tests/**/*.py" = [
+    "ANN",       # no type annotations required in tests
+    "S101",      # assert is fine in pytest
+    "PLR2004",   # magic values are fine in test assertions
+    "T20",       # print is fine in tests for debugging
+    "ERA001",    # commented-out test cases are acceptable
+]
+# Alembic migration scripts: auto-generated, skip most checks.
+"alembic/env.py" = ["ANN", "ERA001", "T20"]
+# Main entry point: allow print for startup messages.
+"app/main.py" = ["T20"]
+# Worker/Celery tasks: allow broad exception catching.
+"app/workers/**/*.py" = ["BLE001"]
+# Quantum solvers: allow complex numeric code patterns.
+"app/quantum/**/*.py" = ["PLR0912", "PLR0915", "C901", "N803", "N806"]
+# Classical optimizer: allow NumPy naming conventions (uppercase matrix names).
+"app/classical/**/*.py" = ["N803", "N806"]
+
+# ── isort configuration ───────────────────────────────────────────────────────
+[lint.isort]
+# Treat these as first-party imports (our application package).
+known-first-party = ["app"]
+# Third-party packages that should be grouped together.
+known-third-party = [
+    "fastapi",
+    "pydantic",
+    "pydantic_settings",
+    "sqlalchemy",
+    "alembic",
+    "redis",
+    "celery",
+    "numpy",
+    "pandas",
+    "scipy",
+    "cvxpy",
+    "qiskit",
+    "qiskit_algorithms",
+    "qiskit_optimization",
+    "pennylane",
+    "langgraph",
+    "langchain",
+    "langchain_openai",
+    "langchain_core",
+    "yfinance",
+    "tenacity",
+    "structlog",
+    "httpx",
+    "uvicorn",
+    "asyncpg",
+]
+# Use a single blank line between import sections.
+lines-after-imports = 2
+# Force single-line imports for clarity.
+force-single-line = false
+# Combine `from` imports from the same module.
+combine-as-imports = true
+# Split `from __future__ import annotations` onto its own section.
+required-imports = ["from __future__ import annotations"]
+
+# ── pyupgrade configuration ───────────────────────────────────────────────────
+[lint.pyupgrade]
+# Keep runtime typing compatible with Python 3.11+.
+keep-runtime-typing = false
+
+# ── flake8-annotations configuration ─────────────────────────────────────────
+[lint.flake8-annotations]
+# Allow *args and **kwargs without annotations.
+allow-star-arg-any = true
+# Suppress ANN* for functions that have no return annotation but return None.
+suppress-none-returning = true
+# Ignore ANN for __init__ methods (return type is always None).
+mypy-init-return = true
+
+# ── flake8-bugbear configuration ──────────────────────────────────────────────
+[lint.flake8-bugbear]
+# Allow default mutable arguments in specific patterns (e.g. Pydantic Field).
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "pydantic.Field",
+]
+
+# ── flake8-tidy-imports configuration ────────────────────────────────────────
+[lint.flake8-tidy-imports]
+# Disallow relative imports beyond the current package.
+ban-relative-imports = "parents"
+
+# ── pep8-naming configuration ─────────────────────────────────────────────────
+[lint.pep8-naming]
+# Allow these classmethod decorators to use `cls` as first argument.
+classmethod-decorators = [
+    "classmethod",
+    "pydantic.validator",
+    "pydantic.field_validator",
+    "pydantic.model_validator",
+]
+
+# ── Formatter ─────────────────────────────────────────────────────────────────
+[format]
+# Use double quotes (consistent with black defaults).
+quote-style = "double"
+# Use spaces for indentation (not tabs).
+indent-style = "space"
+# Respect magic trailing commas (black-compatible behaviour).
+skip-magic-trailing-comma = false
+# Auto-detect line endings.
+line-ending = "auto"
+# Format code blocks inside docstrings.
+docstring-code-format = true
+# Line length for docstring code blocks.
+docstring-code-line-length = 88

@@ -1,0 +1,12 @@
+################################################################################
+# Terraform S3 Backend Configuration — Staging EXAMPLE
+#
+# Copy this file to backend.hcl and fill in real values.
+# NEVER commit backend.hcl to version control.
+################################################################################
+
+bucket         = "your-terraform-state-bucket-name"
+key            = "portfolio-optimizer/staging/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "terraform-state-lock"
+encrypt        = true

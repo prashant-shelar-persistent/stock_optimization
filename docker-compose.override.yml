@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Portfolio Optimizer — Compose Override (Podman-friendly local dev)
+#
+# This file is auto-loaded by `docker compose` / `podman-compose` whenever it
+# sits next to `docker-compose.yml`. It applies fixes that are needed when the
+# stack is run under **rootless Podman** (the default on macOS / modern
+# Fedora / RHEL 9+) but are harmless under Docker Desktop.
+#
+# The bug it fixes
+# ----------------
+# Symptom (from `podman-compose up frontend`):
+#
+#     EPERM: operation not permitted, open '/app/index.html'
+#         at async open (node:internal/fs/promises:637:25)
+#         at async Object.readFile (node:internal/fs/promises:1249:14)
+#         at async viteIndexHtmlMiddleware …
+#
+# Cause:
+#   * `./frontend` is bind-mounted into the container at `/app`.
+#   * Rootless Podman runs inside a user-namespace where your host UID
+#     (e.g. 501 on macOS) is mapped to UID 0 *inside* the namespace, and
+#     every other UID is shifted by ~100000. The default `node` image runs
+#     processes as the unprivileged `node` user (UID 1000), which falls
+#     outside the mapping and therefore has **no read permission** on the
+#     bind-mounted host files.
+#   * Docker Desktop hides this behind its VM and does not need the fix,
+#     so the symptom only appears under Podman.
+#
+# The fix
+# -------
+# `userns_mode: "keep-id"` tells Podman to map the *host* user 1:1 into the
+# container, so file ownership/permissions on the bind-mount match exactly
+# what you see on the host. We apply it to every dev service that bind-mounts
+# source code for hot-reload.
+#
+# Docker compatibility:
+#   `userns_mode: "keep-id"` is a no-op string under Docker Engine (Docker
+#   simply ignores unknown values for `userns_mode` with a warning), so this
+#   override is safe to keep checked in. If you prefer to skip it under
+#   Docker, just delete or rename this file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    userns_mode: "keep-id"
+
+  worker:
+    userns_mode: "keep-id"
+
+  worker-quantum:
+    userns_mode: "keep-id"
+
+  celery-beat:
+    userns_mode: "keep-id"
+
+  frontend:
+    userns_mode: "keep-id"

@@ -1,0 +1,411 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Prometheus Rules — Portfolio Optimizer
+#
+# Canonical location: infra/monitoring/prometheus_rules.yml
+#
+# Mount this file into the Prometheus container at:
+#   /etc/prometheus/rules/portfolio_optimizer.yml
+#
+# Contains two rule groups:
+#   1. recording_rules  — Pre-compute expensive queries for dashboard performance
+#   2. alerting_rules   — Fire alerts when SLOs are breached or services are down
+#
+# Severity levels used in alert labels:
+#   critical  — Immediate action required; pages on-call
+#   warning   — Investigate soon; does not page
+#   info      — Informational; no action required
+# ─────────────────────────────────────────────────────────────────────────────
+
+groups:
+
+  # ── Recording Rules ──────────────────────────────────────────────────────────
+  # Pre-aggregated metrics that are expensive to compute at query time.
+  # These are stored as new time series and referenced by dashboards and alerts.
+  - name: portfolio_optimizer_recording_rules
+    interval: 30s
+    rules:
+
+      # ── API Throughput ────────────────────────────────────────────────────────
+
+      # Total request rate across all routes (5-minute window)
+      - record: job:http_requests_total:rate5m
+        expr: >
+          sum(
+            rate(http_requests_total{job="portfolio-optimizer-backend"}[5m])
+          )
+
+      # Request rate broken down by HTTP status class (2xx, 4xx, 5xx)
+      - record: job:http_requests_by_status_class:rate5m
+        expr: >
+          sum by (status_class) (
+            label_replace(
+              rate(http_requests_total{job="portfolio-optimizer-backend"}[5m]),
+              "status_class",
+              "${1}xx",
+              "status",
+              "([0-9]).*"
+            )
+          )
+
+      # 5xx error rate as a fraction of total requests
+      - record: job:http_error_rate_5xx:rate5m
+        expr: >
+          sum(rate(http_requests_total{job="portfolio-optimizer-backend", status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="portfolio-optimizer-backend"}[5m]))
+
+      # 4xx error rate as a fraction of total requests
+      - record: job:http_error_rate_4xx:rate5m
+        expr: >
+          sum(rate(http_requests_total{job="portfolio-optimizer-backend", status=~"4.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="portfolio-optimizer-backend"}[5m]))
+
+      # ── API Latency ───────────────────────────────────────────────────────────
+
+      # p50 latency across all routes
+      - record: job:http_request_duration_seconds:p50
+        expr: >
+          histogram_quantile(
+            0.50,
+            sum(rate(http_request_duration_seconds_bucket{job="portfolio-optimizer-backend"}[5m])) by (le)
+          )
+
+      # p95 latency across all routes
+      - record: job:http_request_duration_seconds:p95
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="portfolio-optimizer-backend"}[5m])) by (le)
+          )
+
+      # p99 latency across all routes
+      - record: job:http_request_duration_seconds:p99
+        expr: >
+          histogram_quantile(
+            0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="portfolio-optimizer-backend"}[5m])) by (le)
+          )
+
+      # Per-handler p95 latency (useful for identifying slow endpoints)
+      - record: handler:http_request_duration_seconds:p95
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="portfolio-optimizer-backend"}[5m])) by (le, handler)
+          )
+
+      # ── Optimization Runs ─────────────────────────────────────────────────────
+
+      # Total optimization run rate by solver (classical / qaoa / vqe)
+      - record: job:optimization_runs_total:rate5m
+        expr: >
+          sum by (solver) (
+            rate(optimization_runs_total{job="portfolio-optimizer-backend"}[5m])
+          )
+
+      # Optimization success rate by solver
+      - record: job:optimization_success_rate:rate5m
+        expr: >
+          sum by (solver) (
+            rate(optimization_runs_total{job="portfolio-optimizer-backend", status="success"}[5m])
+          )
+          /
+          sum by (solver) (
+            rate(optimization_runs_total{job="portfolio-optimizer-backend"}[5m])
+          )
+
+      # p95 optimization duration by solver
+      - record: solver:optimization_duration_seconds:p95
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum(rate(optimization_duration_seconds_bucket{job="portfolio-optimizer-backend"}[5m])) by (le, solver)
+          )
+
+      # ── Redis Cache ───────────────────────────────────────────────────────────
+
+      # Cache hit ratio (hits / (hits + misses))
+      - record: job:cache_hit_ratio:rate5m
+        expr: >
+          sum(rate(cache_hits_total{job="portfolio-optimizer-backend"}[5m]))
+          /
+          (
+            sum(rate(cache_hits_total{job="portfolio-optimizer-backend"}[5m]))
+            +
+            sum(rate(cache_misses_total{job="portfolio-optimizer-backend"}[5m]))
+          )
+
+      # Redis memory utilisation (used / max)
+      - record: instance:redis_memory_utilisation:ratio
+        expr: >
+          redis_memory_used_bytes / redis_memory_max_bytes
+
+  # ── Alerting Rules ───────────────────────────────────────────────────────────
+  - name: portfolio_optimizer_alerting_rules
+    rules:
+
+      # ── Service Availability ──────────────────────────────────────────────────
+
+      # Backend is completely unreachable (no successful scrapes for 2 minutes)
+      - alert: BackendDown
+        expr: up{job="portfolio-optimizer-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Portfolio Optimizer backend is down"
+          description: >
+            The FastAPI backend ({{ $labels.instance }}) has been unreachable
+            for more than 2 minutes. Prometheus cannot scrape /metrics.
+            Check container health and logs immediately.
+          runbook_url: "https://wiki.example.com/runbooks/backend-down"
+
+      # Redis is unreachable
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis cache is down"
+          description: >
+            The Redis exporter ({{ $labels.instance }}) has been unreachable
+            for more than 2 minutes. Cache operations will fail and market data
+            fetches will hit yfinance on every request.
+          runbook_url: "https://wiki.example.com/runbooks/redis-down"
+
+      # PostgreSQL is unreachable
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: >
+            The PostgreSQL exporter ({{ $labels.instance }}) has been unreachable
+            for more than 2 minutes. Run history persistence will fail.
+          runbook_url: "https://wiki.example.com/runbooks/postgres-down"
+
+      # Celery worker is unreachable
+      - alert: CeleryWorkerDown
+        expr: up{job="celery-worker"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Celery worker metrics endpoint is down"
+          description: >
+            The Celery worker metrics exporter ({{ $labels.instance }}) has been
+            unreachable for more than 5 minutes. Quantum optimization jobs may
+            not be processing.
+          runbook_url: "https://wiki.example.com/runbooks/celery-worker-down"
+
+      # ── API Error Rate ────────────────────────────────────────────────────────
+
+      # 5xx error rate exceeds 5% for 5 minutes (warning)
+      - alert: HighErrorRate5xxWarning
+        expr: job:http_error_rate_5xx:rate5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Elevated 5xx error rate on Portfolio Optimizer API"
+          description: >
+            The 5xx error rate has been above 5% for the past 5 minutes.
+            Current rate: {{ $value | humanizePercentage }}.
+            Investigate recent deployments and application logs.
+          runbook_url: "https://wiki.example.com/runbooks/high-error-rate"
+
+      # 5xx error rate exceeds 10% for 2 minutes (critical)
+      - alert: HighErrorRate5xxCritical
+        expr: job:http_error_rate_5xx:rate5m > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Critical 5xx error rate on Portfolio Optimizer API"
+          description: >
+            The 5xx error rate has exceeded 10% for the past 2 minutes.
+            Current rate: {{ $value | humanizePercentage }}.
+            Immediate investigation required — users are experiencing failures.
+          runbook_url: "https://wiki.example.com/runbooks/high-error-rate"
+
+      # ── API Latency ───────────────────────────────────────────────────────────
+
+      # p95 latency exceeds 2 seconds for 5 minutes (warning)
+      - alert: HighLatencyWarning
+        expr: job:http_request_duration_seconds:p95 > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "High p95 API latency on Portfolio Optimizer"
+          description: >
+            The p95 request latency has been above 2 seconds for 5 minutes.
+            Current p95: {{ $value | humanizeDuration }}.
+            Check for slow optimization runs or database query regressions.
+          runbook_url: "https://wiki.example.com/runbooks/high-latency"
+
+      # p95 latency exceeds 5 seconds for 2 minutes (critical)
+      - alert: HighLatencyCritical
+        expr: job:http_request_duration_seconds:p95 > 5.0
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Critical p95 API latency on Portfolio Optimizer"
+          description: >
+            The p95 request latency has exceeded 5 seconds for 2 minutes.
+            Current p95: {{ $value | humanizeDuration }}.
+            Users are experiencing severe slowdowns. Investigate immediately.
+          runbook_url: "https://wiki.example.com/runbooks/high-latency"
+
+      # ── Optimization Runs ─────────────────────────────────────────────────────
+
+      # Quantum optimization success rate drops below 80% for 10 minutes
+      - alert: QuantumOptimizationFailureRate
+        expr: >
+          (
+            sum(rate(optimization_runs_total{job="portfolio-optimizer-backend", solver=~"qaoa|vqe", status="failure"}[10m]))
+            /
+            sum(rate(optimization_runs_total{job="portfolio-optimizer-backend", solver=~"qaoa|vqe"}[10m]))
+          ) > 0.20
+        for: 10m
+        labels:
+          severity: warning
+          team: quantum
+        annotations:
+          summary: "High quantum optimization failure rate"
+          description: >
+            More than 20% of quantum optimization runs (QAOA/VQE) have failed
+            in the past 10 minutes. Failure rate: {{ $value | humanizePercentage }}.
+            Check Celery worker logs and quantum circuit configuration.
+          runbook_url: "https://wiki.example.com/runbooks/quantum-failures"
+
+      # Classical optimization p95 duration exceeds 30 seconds
+      - alert: ClassicalOptimizationSlow
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum(rate(optimization_duration_seconds_bucket{job="portfolio-optimizer-backend", solver="classical"}[5m])) by (le)
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Classical optimization runs are slow"
+          description: >
+            The p95 duration for classical (Markowitz MVO) optimization has
+            exceeded 30 seconds for 5 minutes.
+            Current p95: {{ $value | humanizeDuration }}.
+            Check CVXPY solver configuration and asset universe size.
+          runbook_url: "https://wiki.example.com/runbooks/slow-optimization"
+
+      # ── Redis Cache ───────────────────────────────────────────────────────────
+
+      # Cache hit ratio drops below 50% for 10 minutes
+      - alert: LowCacheHitRatio
+        expr: job:cache_hit_ratio:rate5m < 0.50
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Low Redis cache hit ratio"
+          description: >
+            The cache hit ratio has been below 50% for 10 minutes.
+            Current ratio: {{ $value | humanizePercentage }}.
+            This may indicate cache eviction pressure or a cache invalidation bug.
+          runbook_url: "https://wiki.example.com/runbooks/low-cache-hit-ratio"
+
+      # Redis memory utilisation exceeds 85%
+      - alert: RedisHighMemoryUsage
+        expr: instance:redis_memory_utilisation:ratio > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis memory usage is high"
+          description: >
+            Redis memory utilisation has been above 85% for 5 minutes.
+            Current utilisation: {{ $value | humanizePercentage }}.
+            Risk of key eviction under the allkeys-lru policy.
+          runbook_url: "https://wiki.example.com/runbooks/redis-memory"
+
+      # Redis memory utilisation exceeds 95%
+      - alert: RedisMemoryCritical
+        expr: instance:redis_memory_utilisation:ratio > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis memory is critically high"
+          description: >
+            Redis memory utilisation has exceeded 95% for 2 minutes.
+            Current utilisation: {{ $value | humanizePercentage }}.
+            Aggressive key eviction is likely occurring. Scale Redis immediately.
+          runbook_url: "https://wiki.example.com/runbooks/redis-memory"
+
+      # ── PostgreSQL ────────────────────────────────────────────────────────────
+
+      # PostgreSQL has too many active connections (> 80% of max_connections)
+      - alert: PostgresHighConnectionCount
+        expr: >
+          sum(pg_stat_activity_count{datname="portfolio_optimizer", state!="idle"})
+          > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High number of active PostgreSQL connections"
+          description: >
+            There are {{ $value }} active (non-idle) connections to the
+            portfolio_optimizer database. This may indicate a connection leak
+            or insufficient connection pooling.
+          runbook_url: "https://wiki.example.com/runbooks/postgres-connections"
+
+      # ── In-flight Requests ────────────────────────────────────────────────────
+
+      # More than 100 requests in-flight simultaneously (potential overload)
+      - alert: TooManyInFlightRequests
+        expr: sum(http_requests_inprogress{job="portfolio-optimizer-backend"}) > 100
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Too many in-flight requests on Portfolio Optimizer API"
+          description: >
+            There are {{ $value }} requests currently in-flight.
+            This may indicate a traffic spike or slow upstream dependencies
+            causing request queuing.
+          runbook_url: "https://wiki.example.com/runbooks/in-flight-requests"
+
+      # ── Watchdog (alerting pipeline heartbeat) ────────────────────────────────
+      # This alert always fires. Alertmanager routes it to the "null" receiver.
+      # If you stop receiving Watchdog notifications, the alerting pipeline is broken.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: "Alerting pipeline heartbeat"
+          description: >
+            This alert always fires to confirm that the Prometheus → Alertmanager
+            → notification pipeline is working end-to-end. If this alert stops
+            firing, investigate Prometheus and Alertmanager health immediately.

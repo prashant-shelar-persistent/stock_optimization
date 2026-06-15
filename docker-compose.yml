@@ -1,0 +1,197 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Portfolio Optimizer — Development Docker Compose
+#
+# Services:
+#   postgres        — PostgreSQL 16 (run history storage)
+#   redis           — Redis 7 (cache + Celery broker/backend)
+#   backend         — FastAPI application (hot-reload via volume mount)
+#   worker          — Celery worker for the *default* queue (classical-only
+#                     optimization runs). Runs many concurrent tasks.
+#   worker-quantum  — Celery worker dedicated to the *quantum* queue. Kept
+#                     separate so a slow quantum job never blocks a classical
+#                     run. Lower concurrency because each task is CPU heavy.
+#   celery-beat     — Celery beat scheduler (periodic tasks)
+#   frontend        — React + Vite dev server (hot-reload)
+#
+# Parallelism notes:
+#   Multiple optimization runs are processed in parallel by setting
+#   ``--concurrency=N`` (one ``prefork`` child process per slot). Combined
+#   with ``worker_prefetch_multiplier=1`` (in ``celery_app.py``) this gives
+#   N truly-parallel tasks per worker without one slow task starving others.
+#   Adjust via the ``CELERY_DEFAULT_CONCURRENCY`` / ``CELERY_QUANTUM_CONCURRENCY``
+#   env vars without rebuilding.
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/portfolio_optimizer
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  ENVIRONMENT: development
+  LOG_LEVEL: INFO
+  QUANTUM_TIMEOUT_SECONDS: "60"
+  MAX_QUANTUM_ASSETS: "8"
+  CACHE_TTL_SECONDS: "3600"
+  RISK_FREE_RATE: "0.02"
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: portfolio_optimizer
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portfolio_optimizer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis ───────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── Backend (FastAPI) ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Celery Worker — default queue (classical optimization runs) ─────────
+  # Handles fast classical-only optimization runs. Higher concurrency lets
+  # many users submit runs in parallel without queueing.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "celery -A app.workers.celery_app worker
+             --loglevel=info
+             --concurrency=${CELERY_DEFAULT_CONCURRENCY:-4}
+             --queues=default
+             -n default-worker@%h"
+
+  # ── Celery Worker — quantum queue ───────────────────────────────────────
+  # Dedicated worker for the quantum queue so a long QAOA/VQE job never
+  # blocks the default queue. Concurrency is intentionally lower because
+  # each quantum simulation is CPU-bound.
+  worker-quantum:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "celery -A app.workers.celery_app worker
+             --loglevel=info
+             --concurrency=${CELERY_QUANTUM_CONCURRENCY:-2}
+             --queues=quantum
+             -n quantum-worker@%h"
+
+  # ── Celery Beat (Periodic Task Scheduler) ───────────────────────────────
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.workers.celery_app beat
+      --loglevel=info
+      --scheduler celery.beat:PersistentScheduler
+
+  # ── Frontend (React + Vite) ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_WS_BASE_URL: ws://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:5173"
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+  redis_data:

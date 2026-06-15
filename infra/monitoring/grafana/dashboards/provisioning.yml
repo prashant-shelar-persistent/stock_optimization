@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Grafana Dashboard Provisioning — Portfolio Optimizer
+#
+# Canonical location: infra/monitoring/grafana/dashboards/provisioning.yml
+#
+# Mount this file into the Grafana container at:
+#   /etc/grafana/provisioning/dashboards/provisioning.yml
+#
+# Grafana reads all files in /etc/grafana/provisioning/dashboards/ on startup
+# and automatically loads every *.json file found in the configured path.
+# Dashboard JSON files placed alongside this file are imported automatically
+# without any manual UI interaction.
+#
+# Volume mount in docker-compose (production):
+#   ./infra/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+#
+# Reference:
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+providers:
+  - name: "Portfolio Optimizer Dashboards"
+    # Organisation ID — 1 is the default org in a fresh Grafana installation
+    orgId: 1
+    # Folder name shown in the Grafana UI sidebar
+    folder: "Portfolio Optimizer"
+    # Stable folder UID for URL-based navigation and API references
+    folderUid: "portfolio-optimizer"
+    # Load dashboards from JSON files on disk
+    type: file
+    # Prevent operators from deleting provisioned dashboards via the UI.
+    # Dashboards can only be removed by removing the JSON file and reloading.
+    disableDeletion: true
+    # Grafana polls this directory every N seconds and reloads changed JSON files.
+    # Set to 0 to disable polling (dashboards are only loaded at startup).
+    updateIntervalSeconds: 30
+    # When false, UI edits are discarded on the next reload (changes must be
+    # made to the JSON file on disk to persist). Set to true only in development.
+    allowUiUpdates: false
+    options:
+      # Absolute path inside the Grafana container where dashboard JSON files live.
+      # This must match the target of the volume mount defined in docker-compose.
+      path: /etc/grafana/provisioning/dashboards
+      # When true, subdirectory names become Grafana folder names.
+      # Set to false because all dashboards live in the root of the mount.
+      foldersFromFilesStructure: false

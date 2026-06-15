@@ -1,0 +1,18 @@
+################################################################################
+# Terraform S3 Backend Configuration — EXAMPLE
+#
+# Copy this file to backend.hcl and fill in real values.
+# NEVER commit backend.hcl to version control.
+#
+# Usage:
+#   terraform init -backend-config=backend.hcl
+################################################################################
+
+bucket         = "your-terraform-state-bucket-name"
+key            = "portfolio-optimizer/production/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "terraform-state-lock"
+encrypt        = true
+
+# Optional: specify a role to assume for state operations
+# role_arn = "arn:aws:iam::123456789012:role/TerraformStateRole"
