@@ -3,11 +3,16 @@
 Tables:
     optimization_runs — stores the full history of optimization runs,
                         including inputs, results, and status.
+    chat_sessions     — stores multi-turn chat conversations used by the
+                        chat assistant to collect optimization parameters
+                        via natural language slot filling.
 
 Design decisions:
-    - Uses PostgreSQL-native UUID type for run_id to guarantee global uniqueness.
+    - Uses PostgreSQL-native UUID type for run_id / session_id to guarantee
+      global uniqueness.
     - JSON columns store rich nested result objects (classical/quantum results,
-      comparison summary) to avoid over-normalisation for this use case.
+      comparison summary, extracted slots) to avoid over-normalisation for
+      this use case.
     - Denormalised Sharpe ratio columns (classical_sharpe, quantum_sharpe) allow
       efficient list queries without deserialising the full JSON blobs.
     - All timestamps are timezone-aware (UTC) to avoid ambiguity.
@@ -25,13 +30,14 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     String,
     Text,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -185,7 +191,7 @@ class OptimizationRun(Base):
         comment="Denormalised quantum Sharpe ratio (QAOA preferred, else VQE)",
     )
 
-    # ── Error handling ────────────────────────────────────────────────────────
+    # ── Error handling ───────────────────────────────────────────────────────
 
     error_message: Mapped[str | None] = mapped_column(
         Text,
@@ -193,7 +199,7 @@ class OptimizationRun(Base):
         comment="Human-readable error description when status == 'failed'",
     )
 
-    # ── Timestamps ────────────────────────────────────────────────────────────
+    # ── Timestamps ───────────────────────────────────────────────────────────
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -207,7 +213,18 @@ class OptimizationRun(Base):
         comment="UTC timestamp when the run finished (null if still in progress)",
     )
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Relationships ────────────────────────────────────────────────────────
+
+    # Back-reference from ChatSession (populated lazily when accessed)
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        "ChatSession",
+        back_populates="optimization_run",
+        foreign_keys="ChatSession.run_id",
+        primaryjoin="OptimizationRun.run_id == ChatSession.run_id",
+        lazy="select",
+    )
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
 
     def __repr__(self) -> str:
         return (
@@ -263,3 +280,261 @@ class OptimizationRun(Base):
         if completed.tzinfo is None:
             completed = completed.replace(tzinfo=UTC)
         return (completed - created).total_seconds()
+
+
+class ChatSession(Base):
+    """Stores a multi-turn chat conversation for natural-language slot filling.
+
+    Each ``ChatSession`` represents one user conversation with the chat
+    assistant.  The assistant uses GPT-4o structured outputs to extract
+    ``OptimizationRequest`` slot values from the user's natural language
+    messages.  When all required slots are filled, the session transitions
+    to ``pending_confirmation`` and presents a payload preview card.  On
+    user confirmation the session transitions to ``confirmed`` and an
+    optimization run is dispatched.
+
+    Lifecycle (``status`` column):
+        collecting           → Session is open; the LLM is still gathering
+                               required slot values via clarifying questions.
+        pending_confirmation → All required slots have been filled; the
+                               extracted payload is awaiting user confirmation.
+        confirmed            → The user confirmed the payload; an optimization
+                               run has been dispatched (``run_id`` is set).
+        expired              → The session TTL elapsed without confirmation;
+                               no further messages are accepted.
+
+    Columns:
+        id              — Auto-increment integer primary key (internal use only).
+        session_id      — UUID string exposed in the API (indexed for fast lookup).
+        status          — Session lifecycle state (see above).
+        messages        — Full conversation history as a JSON array of
+                          ``{"role": "user"|"assistant", "content": "..."}``
+                          objects, in chronological order.
+        extracted_slots — Partial or complete ``OptimizationRequest`` fields
+                          extracted so far, stored as a JSON object.  Null
+                          until the first successful LLM extraction.
+        run_id          — Foreign key to ``optimization_runs.run_id``.  Null
+                          until the session is confirmed and a run is dispatched.
+        created_at      — UTC timestamp when the session was created.
+        updated_at      — UTC timestamp of the last message or status change.
+        expires_at      — UTC timestamp after which the session is considered
+                          expired.  Set to ``created_at + TTL`` on creation.
+
+    Indexes:
+        ix_chat_sessions_session_id  — Unique; primary API lookup key.
+        ix_chat_sessions_status      — Filter by lifecycle state.
+        ix_chat_sessions_expires_at  — Efficient expiry sweep queries.
+        ix_chat_sessions_run_id      — Join to optimization_runs.
+    """
+
+    __tablename__ = "chat_sessions"
+
+    __table_args__ = (
+        # Enforce valid status values at the DB level
+        CheckConstraint(
+            "status IN ('collecting', 'pending_confirmation', 'confirmed', 'expired')",
+            name="ck_chat_sessions_status",
+        ),
+        # expires_at must be after created_at
+        CheckConstraint(
+            "expires_at > created_at",
+            name="ck_chat_sessions_expires_after_created",
+        ),
+        # Index for fast API lookups by session UUID
+        Index("ix_chat_sessions_session_id", "session_id", unique=True),
+        # Index for filtering by lifecycle state
+        Index("ix_chat_sessions_status", "status"),
+        # Index for efficient expiry sweep (background job or lazy check)
+        Index("ix_chat_sessions_expires_at", "expires_at"),
+        # Index for joining to optimization_runs
+        Index("ix_chat_sessions_run_id", "run_id"),
+    )
+
+    # ── Primary key ──────────────────────────────────────────────────────────
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+        comment="Internal auto-increment primary key",
+    )
+
+    # ── Identity ─────────────────────────────────────────────────────────────
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        unique=True,
+        nullable=False,
+        index=True,
+        default=lambda: str(uuid.uuid4()),
+        comment="UUID exposed in the API; generated by the application layer",
+    )
+
+    # ── Status ───────────────────────────────────────────────────────────────
+
+    status: Mapped[str] = mapped_column(
+        String(25),
+        nullable=False,
+        default="collecting",
+        index=True,
+        comment=(
+            "Session lifecycle state: "
+            "collecting | pending_confirmation | confirmed | expired"
+        ),
+    )
+
+    # ── Conversation data ─────────────────────────────────────────────────────
+
+    messages: Mapped[list] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        comment=(
+            "Ordered list of conversation turns: "
+            '[{"role": "user"|"assistant", "content": "..."}]'
+        ),
+    )
+
+    extracted_slots: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment=(
+            "Partial or complete OptimizationRequest fields extracted by the LLM. "
+            "Null until the first successful extraction turn."
+        ),
+    )
+
+    # ── Link to optimization run (set on confirmation) ────────────────────────
+
+    run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "optimization_runs.run_id",
+            name="fk_chat_sessions_run_id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+        comment=(
+            "UUID of the dispatched OptimizationRun. "
+            "Null until the session is confirmed."
+        ),
+    )
+
+    # ── Timestamps ───────────────────────────────────────────────────────────
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="UTC timestamp when the session was created",
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="UTC timestamp of the last message or status change",
+    )
+
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment=(
+            "UTC timestamp after which the session is considered expired. "
+            "Set to created_at + TTL (default 24 h) on creation."
+        ),
+    )
+
+    # ── Relationships ─────────────────────────────────────────────────────────
+
+    optimization_run: Mapped["OptimizationRun | None"] = relationship(
+        "OptimizationRun",
+        back_populates="chat_sessions",
+        foreign_keys=[run_id],
+        primaryjoin="ChatSession.run_id == OptimizationRun.run_id",
+        lazy="select",
+    )
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def __repr__(self) -> str:
+        return (
+            f"<ChatSession "
+            f"session_id={self.session_id!r} "
+            f"status={self.status!r} "
+            f"messages={len(self.messages) if self.messages else 0}>"
+        )
+
+    @property
+    def is_expired(self) -> bool:
+        """Return True if the session has passed its expiry timestamp.
+
+        This is a convenience check; the authoritative expiry is enforced
+        by the service layer which also updates ``status`` to ``'expired'``.
+        """
+        now = datetime.now(UTC)
+        expires = self.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=UTC)
+        return now >= expires
+
+    @property
+    def is_terminal(self) -> bool:
+        """Return True if the session is in a terminal state.
+
+        Terminal states are ``confirmed`` and ``expired``; no further
+        messages or confirmations are accepted.
+        """
+        return self.status in ("confirmed", "expired")
+
+    def append_message(self, role: str, content: str) -> None:
+        """Append a single message turn to the conversation history.
+
+        Args:
+            role:    Either ``'user'`` or ``'assistant'``.
+            content: The text content of the message.
+
+        Note:
+            This mutates ``self.messages`` in place.  SQLAlchemy tracks
+            mutations on JSON columns via the ``MutableList`` extension;
+            if that extension is not enabled, callers must reassign the
+            column (``session.messages = [*session.messages, new_msg]``)
+            to trigger change detection.
+        """
+        if self.messages is None:
+            self.messages = []
+        # Reassign to ensure SQLAlchemy detects the mutation on JSON columns
+        self.messages = [*self.messages, {"role": role, "content": content}]
+        self.updated_at = datetime.now(UTC)
+
+    def mark_pending_confirmation(self, extracted_slots: dict) -> None:
+        """Transition to ``pending_confirmation`` with the extracted payload.
+
+        Args:
+            extracted_slots: The full ``OptimizationRequest``-compatible dict
+                             extracted by the LLM slot filler.
+        """
+        self.status = "pending_confirmation"
+        self.extracted_slots = extracted_slots
+        self.updated_at = datetime.now(UTC)
+
+    def mark_confirmed(self, run_id: str) -> None:
+        """Transition to ``confirmed`` and record the dispatched run UUID.
+
+        Args:
+            run_id: The UUID of the optimization run that was dispatched.
+        """
+        self.status = "confirmed"
+        self.run_id = run_id
+        self.updated_at = datetime.now(UTC)
+
+    def mark_expired(self) -> None:
+        """Transition to ``expired`` status.
+
+        Called by the service layer when a lazy expiry check detects that
+        ``expires_at`` has passed.
+        """
+        self.status = "expired"
+        self.updated_at = datetime.now(UTC)

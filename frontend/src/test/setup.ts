@@ -7,7 +7,7 @@
 
 import "@testing-library/jest-dom";
 
-// ── Polyfills for jsdom ────────────────────────────────────────────────────────
+// ── Polyfills for jsdom ────────────────────────────────────────────────────
 
 // Radix UI Slider (and other components) use ResizeObserver internally.
 // jsdom doesn't implement it, so we provide a no-op stub.
@@ -27,6 +27,13 @@ if (typeof globalThis.IntersectionObserver === "undefined") {
     unobserve() {}
     disconnect() {}
   };
+}
+
+// jsdom does not implement Element.scrollIntoView.
+// ChatAssistant uses scrollEndRef.current?.scrollIntoView({ behavior: "smooth" })
+// to auto-scroll the message thread. We provide a no-op stub so tests don't throw.
+if (typeof Element.prototype.scrollIntoView === "undefined") {
+  Element.prototype.scrollIntoView = function () {};
 }
 
 // Suppress noisy console.error from React about act() warnings in tests

@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backend Tests</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+<style>
+:root{--bg:#0d1117;--bg-card:#161b22;--bg-sidebar:#0d1117;--text:#e6edf3;--text-dim:#8b949e;--border:#30363d;--accent:#58a6ff;--accent-dim:#1f6feb;--code-bg:#1c2128;--hover:#21262d}*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;display:flex;min-height:100vh}main{flex:1;max-width:900px;padding:40px 48px;overflow-x:auto}h1{font-size:2rem;font-weight:700;margin-bottom:8px;padding-bottom:12px;border-bottom:1px solid var(--border)}h2{font-size:1.5rem;font-weight:600;margin-top:32px;margin-bottom:12px;color:var(--text)}h3{font-size:1.2rem;font-weight:600;margin-top:24px;margin-bottom:8px}h4{font-size:1rem;font-weight:600;margin-top:20px;margin-bottom:6px}p{margin-bottom:12px}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:0.875em;font-family:"SFMono-Regular",Consolas,monospace}pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;margin:16px 0;position:relative}pre code{background:none;padding:0}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:8px 12px;border:1px solid var(--border);text-align:left}th{background:var(--bg-card);font-weight:600}tr:nth-child(even){background:rgba(255,255,255,0.02)}blockquote{border-left:3px solid var(--accent);padding:8px 16px;margin:16px 0;color:var(--text-dim);background:rgba(88,166,255,0.04)}ul,ol{margin:8px 0 12px 24px}li{margin-bottom:4px}.breadcrumb{font-size:0.85rem;color:var(--text-dim);margin-bottom:20px}.breadcrumb a{color:var(--text-dim)}.mermaid,pre.mermaid{background:var(--bg-card);border-radius:8px;padding:16px;margin:16px 0;text-align:center;border:none}.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600}.badge-info{background:rgba(88,166,255,0.15);color:var(--accent)}.last-updated{font-size:0.8rem;color:var(--text-dim);margin-top:40px;padding-top:16px;border-top:1px solid var(--border)}.hero{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:24px;margin:24px 0}.section-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin:24px 0}.section-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;transition:border-color 0.2s}.section-card:hover{border-color:var(--accent)}.section-card h3{margin-top:0;font-size:1.1rem}.section-card p{font-size:0.9rem;color:var(--text-dim);margin-bottom:8px}.tech-stack{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.tech-badge{background:var(--code-bg);border:1px solid var(--border);padding:4px 12px;border-radius:16px;font-size:0.85rem}.toc-aside{width:200px;min-width:200px;padding:16px 0 16px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;border-left:1px solid var(--border);font-size:0.8rem;scroll-behavior:smooth}.toc-aside .toc-title{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);font-weight:600;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border)}.toc-aside a{display:block;padding:3px 0;color:var(--text-dim);text-decoration:none;transition:color 0.15s}.toc-aside a:hover{color:var(--text)}.toc-aside a.toc-active{color:var(--accent);font-weight:500}.toc-aside a.toc-h3{padding-left:12px;font-size:0.75rem}.page-nav{display:flex;justify-content:space-between;margin-top:40px;padding-top:20px;border-top:1px solid var(--border);gap:16px}.page-nav a{display:block;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:border-color 0.2s;flex:1;max-width:48%}.page-nav a:hover{border-color:var(--accent)}.page-nav .nav-label{font-size:0.75rem;color:var(--text-dim);margin-bottom:4px}.page-nav .nav-title{color:var(--accent);font-weight:500}.page-nav .nav-next{text-align:right}.code-copy{position:absolute;top:8px;right:8px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-dim);padding:4px 8px;border-radius:4px;font-size:0.7rem;cursor:pointer;opacity:0;transition:opacity 0.2s}pre:hover .code-copy{opacity:1}.code-copy:hover{color:var(--text);border-color:var(--accent)}.mermaid-expand{position:absolute;top:8px;right:8px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-dim);padding:4px 8px;border-radius:4px;font-size:0.7rem;cursor:pointer;opacity:0;transition:opacity 0.2s;z-index:10}div:hover>.mermaid-expand{opacity:1}.mermaid-expand:hover{color:var(--accent);border-color:var(--accent)}.mermaid-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}.mermaid-overlay.open{display:flex}.mermaid-overlay-inner{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:95vw;max-height:95vh;overflow:auto;position:relative}.mermaid-overlay-close{position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-dim);font-size:1.5rem;cursor:pointer;line-height:1}.mermaid-overlay-close:hover{color:var(--text)}.back-to-top{position:fixed;bottom:24px;right:24px;width:36px;height:36px;background:var(--bg-card);border:1px solid var(--border);border-radius:50%;color:var(--text-dim);font-size:1rem;cursor:pointer;display:none;align-items:center;justify-content:center;transition:all 0.2s;z-index:100}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}h2 .heading-anchor,h3 .heading-anchor{opacity:0;color:var(--text-dim);text-decoration:none;margin-left:6px;font-size:0.8em;transition:opacity 0.15s}h2:hover .heading-anchor,h3:hover .heading-anchor{opacity:1}h2:hover .heading-anchor:hover,h3:hover .heading-anchor:hover{color:var(--accent)}@media print{nav.sidebar,.toc-aside,.back-to-top,.code-copy,.breadcrumb,.page-nav{display:none!important}body{display:block!important}main{max-width:100%!important;padding:20px!important}pre{white-space:pre-wrap!important;word-break:break-all}a{color:#000!important}h1,h2,h3{page-break-after:avoid}}@media(max-width:1200px){.toc-aside{display:none}}@media(max-width:768px){nav.sidebar{display:none}main{padding:20px}}
+nav.sidebar{width:280px;min-width:280px;background:var(--bg-sidebar,var(--bg,#0d1117));border-right:1px solid var(--border,#30363d);padding:16px 0;overflow-y:auto;position:sticky;top:0;height:100vh}nav.sidebar .logo{padding:12px 20px;font-size:1.1rem;font-weight:700;color:var(--accent,#58a6ff);border-bottom:1px solid var(--border,#30363d);margin-bottom:8px}nav.sidebar a{display:block;padding:6px 20px;color:var(--text-dim,#8b949e);text-decoration:none;font-size:0.85rem;transition:all 0.15s}nav.sidebar a:hover{background:var(--hover,#21262d);color:var(--text,#e6edf3)}nav.sidebar a.active{color:var(--accent,#58a6ff);background:rgba(88,166,255,0.08);border-left:2px solid var(--accent,#58a6ff)}nav.sidebar .section-title{padding:14px 20px 6px;margin-top:8px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent,#58a6ff);font-weight:700;border-top:1px solid var(--border,#30363d)}.sidebar-search{padding:8px 12px;border-bottom:1px solid var(--border,#30363d);margin-bottom:8px}.sidebar-search input{width:100%;padding:8px 10px;background:var(--code-bg,#1c2128);border:1px solid var(--border,#30363d);border-radius:6px;color:var(--text,#e6edf3);font-size:0.85rem;outline:none}.sidebar-search input:focus{border-color:var(--accent,#58a6ff)}.search-results{max-height:300px;overflow-y:auto}.search-results a{padding:4px 8px;font-size:0.8rem;border-radius:4px}.search-results .search-heading{font-size:0.75rem;color:var(--text-dim,#8b949e);padding-left:16px}.search-results:empty{display:none}@media(max-width:768px){nav.sidebar{display:none}}
+
+</style>
+</head>
+<body>
+<nav class="sidebar">
+<div class="logo">Documentation</div>
+<div class="sidebar-search">
+<input type="text" id="doc-search" placeholder="Search docs..." autocomplete="off">
+<div id="search-results" class="search-results"></div>
+</div>
+<div id="sidebar-nav-links">
+<a href="../index.html" class="nav-root">Portfolio Optimizer — Classical + Quantum + Agent-First</a>
+<div class="section-title">Getting Started</div>
+<a href="../01-getting-started/environment-variables.html">Environment Variables</a>
+<a href="../01-getting-started/overview.html">Project Overview</a>
+<a href="../01-getting-started/podman-notes.html">Podman Notes</a>
+<a href="../01-getting-started/quickstart-docker.html">Quickstart: Docker Compose</a>
+<a href="../01-getting-started/quickstart-local.html">Quickstart: Local Development</a>
+<div class="section-title">Overview</div>
+<a href="../01-overview/README.html">Overview</a>
+<div class="section-title">Architecture</div>
+<a href="../02-architecture/agent-pipeline.html">Agent Pipeline</a>
+<a href="../02-architecture/request-lifecycle.html">Request Lifecycle</a>
+<a href="../02-architecture/system-overview.html">System Overview</a>
+<a href="../02-architecture/technology-decisions.html">Technology Decisions</a>
+<div class="section-title">Getting Started</div>
+<a href="../02-getting-started/README.html">Getting Started</a>
+<div class="section-title">Architecture</div>
+<a href="../03-architecture/README.html">Architecture</a>
+<div class="section-title">Backend</div>
+<a href="../03-backend/README.html">Backend Core</a>
+<a href="../03-backend/application-factory.html">Application Factory</a>
+<a href="../03-backend/configuration.html">Configuration</a>
+<a href="../03-backend/dependencies.html">Dependencies</a>
+<a href="../03-backend/exceptions.html">Exceptions</a>
+<a href="../03-backend/logging.html">Logging</a>
+<div class="section-title">Api</div>
+<a href="../04-api/README.html">API Reference</a>
+<div class="section-title">Api Reference</div>
+<a href="../04-api-reference/README.html">API Reference</a>
+<a href="../04-api-reference/assets-endpoint.html">GET /api/v1/assets/search</a>
+<a href="../04-api-reference/error-codes.html">Error Codes Reference</a>
+<a href="../04-api-reference/health-endpoint.html">GET /api/v1/health</a>
+<a href="../04-api-reference/optimize-endpoint.html">POST /api/v1/optimize</a>
+<a href="../04-api-reference/runs-endpoints.html">Run History Endpoints</a>
+<a href="../04-api-reference/websocket-endpoint.html">WS /ws/runs/{run_id}/progress</a>
+<div class="section-title">Agent Layer</div>
+<a href="../05-agent-layer/README.html">Agent Layer</a>
+<a href="../05-agent-layer/agent-state.html">Agent State</a>
+<a href="../05-agent-layer/error-routing.html">Error Routing</a>
+<a href="../05-agent-layer/graph-definition.html">Graph Definition</a>
+<a href="../05-agent-layer/node-classical.html">Node: Classical Optimization</a>
+<a href="../05-agent-layer/node-comparison.html">Node: Comparison</a>
+<a href="../05-agent-layer/node-constraint-validation.html">Node: Constraint Validation</a>
+<a href="../05-agent-layer/node-data-fetch.html">Node: Data Fetch</a>
+<a href="../05-agent-layer/node-frontier.html">Node: Frontier Computation</a>
+<a href="../05-agent-layer/node-llm-explanation.html">Node: LLM Explanation</a>
+<a href="../05-agent-layer/node-quantum-dispatch.html">Node: Quantum Dispatch</a>
+<div class="section-title">Classical Optimization</div>
+<a href="../05-classical-optimization/README.html">Classical Optimization</a>
+<div class="section-title">Classical Optimization</div>
+<a href="../06-classical-optimization/README.html">Classical Optimization</a>
+<a href="../06-classical-optimization/constraints.html">Optimization Constraints</a>
+<a href="../06-classical-optimization/efficient-frontier.html">Efficient Frontier</a>
+<a href="../06-classical-optimization/markowitz-mvo.html">Markowitz Mean-Variance Optimization</a>
+<a href="../06-classical-optimization/multi-objective.html">Multi-Objective Optimization</a>
+<div class="section-title">Quantum Optimization</div>
+<a href="../06-quantum-optimization/README.html">Quantum Optimization</a>
+<div class="section-title">Agent Layer</div>
+<a href="../07-agent-layer/README.html">Agent Layer</a>
+<div class="section-title">Quantum Optimization</div>
+<a href="../07-quantum-optimization/README.html">Quantum Optimization</a>
+<a href="../07-quantum-optimization/qaoa-solver.html">QAOA Solver</a>
+<a href="../07-quantum-optimization/quantum-dispatcher.html">Quantum Dispatcher</a>
+<a href="../07-quantum-optimization/quantum-vs-classical.html">Quantum vs Classical Optimization</a>
+<a href="../07-quantum-optimization/qubo-formulation.html">QUBO Formulation</a>
+<a href="../07-quantum-optimization/vqe-solver.html">VQE Solver</a>
+<div class="section-title">Data Layer</div>
+<a href="../08-data-layer/README.html">Data Layer</a>
+<a href="../08-data-layer/market-data-fetcher.html">Market Data Fetcher</a>
+<a href="../08-data-layer/portfolio-metrics.html">Portfolio Metrics</a>
+<a href="../08-data-layer/redis-caching.html">Redis Caching</a>
+<a href="../08-data-layer/sector-classification.html">Sector Classification</a>
+<div class="section-title">Database</div>
+<a href="../09-database/README.html">Database</a>
+<a href="../09-database/async-session.html">Async Session — `AsyncSessionLocal` and `DbDep`</a>
+<a href="../09-database/migrations.html">Database Migrations</a>
+<a href="../09-database/orm-models.html">ORM Models — `OptimizationRun`</a>
+<a href="../09-database/schema.html">Database Schema — `optimization_runs`</a>
+<div class="section-title">Task Queue</div>
+<a href="../10-task-queue/README.html">Task Queue</a>
+<a href="../10-task-queue/celery-configuration.html">Celery Configuration</a>
+<a href="../10-task-queue/optimization-task.html">Optimization Task</a>
+<a href="../10-task-queue/progress-events.html">Progress Events</a>
+<a href="../10-task-queue/queue-routing.html">Queue Routing</a>
+<div class="section-title">Workers</div>
+<a href="../10-workers/README.html">Workers (Task Queue)</a>
+<div class="section-title">Frontend</div>
+<a href="../11-frontend/README.html">Frontend</a>
+<a href="../11-frontend/api-client.html">API Client</a>
+<a href="../11-frontend/components.html">Components</a>
+<a href="../11-frontend/hooks.html">Custom Hooks</a>
+<a href="../11-frontend/pages.html">Pages</a>
+<a href="../11-frontend/project-structure.html">Frontend Project Structure</a>
+<a href="../11-frontend/state-management.html">State Management</a>
+<a href="../11-frontend/type-definitions.html">Type Definitions</a>
+<div class="section-title">Configuration</div>
+<a href="../12-configuration/README.html">Configuration</a>
+<div class="section-title">Schemas</div>
+<a href="../12-schemas/README.html">Schemas & Validation</a>
+<a href="../12-schemas/request-schemas.html">Request Schemas</a>
+<a href="../12-schemas/response-schemas.html">Response Schemas</a>
+<a href="../12-schemas/validation-rules.html">Validation Rules</a>
+<div class="section-title">Deployment</div>
+<a href="../13-deployment/README.html">Deployment</a>
+<div class="section-title">Testing</div>
+<a href="../13-testing/README.html">Testing</a>
+<a href="../13-testing/backend-tests.html">Backend Tests</a>
+<a href="../13-testing/e2e-smoke-tests.html">E2E and Smoke Tests</a>
+<a href="../13-testing/frontend-tests.html">Frontend Tests</a>
+<a href="../13-testing/test-coverage.html">Test Coverage</a>
+<div class="section-title">Infrastructure</div>
+<a href="../14-infrastructure/README.html">Infrastructure</a>
+<a href="../14-infrastructure/aws-architecture.html">AWS Architecture</a>
+<a href="../14-infrastructure/docker-compose.html">Docker Compose — Development Stack</a>
+<a href="../14-infrastructure/environments.html">Environments</a>
+<a href="../14-infrastructure/terraform-modules.html">Terraform Modules</a>
+<a href="../14-infrastructure/terraform-overview.html">Terraform Overview</a>
+<div class="section-title">Testing</div>
+<a href="../14-testing/README.html">Testing</a>
+<div class="section-title">Cicd</div>
+<a href="../15-cicd/README.html">CI/CD Pipelines</a>
+<a href="../15-cicd/cd-workflow.html">CD Workflow (`cd.yml`)</a>
+<a href="../15-cicd/ci-workflow.html">CI Workflow (`ci.yml`)</a>
+<a href="../15-cicd/github-secrets.html">GitHub Secrets & Variables</a>
+<a href="../15-cicd/terraform-workflow.html">Terraform Workflow (`terraform.yml`)</a>
+<div class="section-title">Monitoring</div>
+<a href="../15-monitoring/README.html">Monitoring & Observability</a>
+<div class="section-title">Observability</div>
+<a href="../16-observability/README.html">Observability</a>
+<a href="../16-observability/alertmanager.html">Alertmanager</a>
+<a href="../16-observability/grafana-dashboards.html">Grafana Dashboards</a>
+<a href="../16-observability/logging-guide.html">Logging Guide</a>
+<a href="../16-observability/prometheus-metrics.html">Prometheus Metrics</a>
+<div class="section-title">Security</div>
+<a href="../16-security/README.html">Security</a>
+<div class="section-title">Contributing</div>
+<a href="../17-contributing/README.html">Contributing</a>
+<div class="section-title">Operations</div>
+<a href="../17-operations/README.html">Operations & Runbook</a>
+<a href="../17-operations/configuration-reference.html">Configuration Reference</a>
+<a href="../17-operations/deployment-guide.html">Deployment Guide</a>
+<a href="../17-operations/runbook.html">Operational Runbook</a>
+<a href="../17-operations/troubleshooting.html">Troubleshooting</a>
+</div>
+</nav>
+<main>
+<div class="breadcrumb"><a href="../index.html">Home</a> &rsaquo; <a href="../13-testing/README.html">Testing</a> &rsaquo; Backend Tests</div>
+<h1>Backend Tests</h1>
+<h1 id="backend-tests">Backend Tests</h1>
+<p>The backend test suite is a comprehensive collection of unit, integration, and end-to-end tests
+written with <strong>pytest</strong> and <strong>pytest-asyncio</strong>. Tests live in the <code>tests/</code> directory at the
+workspace root and are run from the <code>backend/</code> directory where <code>pyproject.toml</code> is located.</p>
+<h2 id="pytest-configuration">pytest Configuration<a href="#pytest-configuration" class="heading-anchor" aria-label="Link">#</a></h2>
+<p>All pytest settings are declared in <code>backend/pyproject.toml</code> under <code>[tool.pytest.ini_options]</code>:</p>
+<pre class="highlight"><code class="language-toml">[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["../tests"]
+addopts = "--cov=app --cov-report=term-missing -v"</code></pre>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Value</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>asyncio_mode</code></td>
+<td><code>"auto"</code></td>
+<td>All <code>async def</code> test functions are automatically treated as asyncio coroutines — no <code>@pytest.mark.asyncio</code> decorator required (though it is still used for clarity)</td>
+</tr>
+<tr>
+<td><code>testpaths</code></td>
+<td><code>["../tests"]</code></td>
+<td>Points pytest at the <code>tests/</code> directory one level above <code>backend/</code></td>
+</tr>
+<tr>
+<td><code>addopts</code></td>
+<td><code>--cov=app --cov-report=term-missing -v</code></td>
+<td>Enables coverage collection on the <code>app</code> package, prints missing lines, and uses verbose output</td>
+</tr>
+</tbody>
+</table>
+<h3 id="running-the-suite">Running the Suite<a href="#running-the-suite" class="heading-anchor" aria-label="Link">#</a></h3>
+<pre class="highlight"><code class="language-bash"># From the backend/ directory
+cd backend
+python -m pytest -v
+
+# Run a single test file
+python -m pytest ../tests/test_api_health.py -v
+
+# Run a specific test function
+python -m pytest ../tests/test_api_health.py::test_health_all_up_returns_200_healthy -v
+
+# Run with coverage report
+python -m pytest --cov=app --cov-report=html</code></pre>
+<hr />
+<h2 id="conftestpy-fixtures"><code>conftest.py</code> Fixtures<a href="#conftestpy-fixtures" class="heading-anchor" aria-label="Link">#</a></h2>
+<h3 id="root-testsconftestpy">Root <code>tests/conftest.py</code><a href="#root-testsconftestpy" class="heading-anchor" aria-label="Link">#</a></h3>
+<p>The root conftest provides <strong>shared numpy/pandas fixtures</strong> used across unit tests for
+classical and quantum optimization. All fixtures use a deterministic random seed (<code>seed=42</code>)
+for reproducibility.</p>
+<pre class="highlight"><code class="language-python">RNG = np.random.default_rng(seed=42)</code></pre>
+<h4 id="3-asset-universe-fixtures">3-Asset Universe Fixtures</h4>
+<table>
+<thead>
+<tr>
+<th>Fixture</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tickers_3</code></td>
+<td><code>list[str]</code></td>
+<td><code>["AAPL", "MSFT", "GOOGL"]</code></td>
+</tr>
+<tr>
+<td><code>expected_returns_3</code></td>
+<td><code>np.ndarray</code></td>
+<td>Annualised returns <code>[0.12, 0.10, 0.09]</code></td>
+</tr>
+<tr>
+<td><code>cov_matrix_3</code></td>
+<td><code>np.ndarray</code></td>
+<td>3×3 positive-definite covariance matrix</td>
+</tr>
+<tr>
+<td><code>returns_df_3</code></td>
+<td><code>pd.DataFrame</code></td>
+<td>250 days of simulated daily log returns</td>
+</tr>
+</tbody>
+</table>
+<h4 id="4-asset-universe-fixtures">4-Asset Universe Fixtures</h4>
+<table>
+<thead>
+<tr>
+<th>Fixture</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tickers_4</code></td>
+<td><code>list[str]</code></td>
+<td><code>["AAPL", "MSFT", "GOOGL", "AMZN"]</code></td>
+</tr>
+<tr>
+<td><code>expected_returns_4</code></td>
+<td><code>np.ndarray</code></td>
+<td>Annualised returns <code>[0.12, 0.10, 0.09, 0.15]</code></td>
+</tr>
+<tr>
+<td><code>cov_matrix_4</code></td>
+<td><code>np.ndarray</code></td>
+<td>4×4 positive-definite covariance matrix</td>
+</tr>
+<tr>
+<td><code>sector_tags_4</code></td>
+<td><code>dict[str, str]</code></td>
+<td>GICS sector mapping for 4 assets</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example usage:</strong></p>
+<pre class="highlight"><code class="language-python">def test_optimizer_3_assets(
+    tickers_3: list[str],
+    expected_returns_3: np.ndarray,
+    cov_matrix_3: np.ndarray,
+) -&gt; None:
+    optimizer = ClassicalOptimizer()
+    result = optimizer.optimize(make_input(tickers_3, expected_returns_3, cov_matrix_3))
+    assert abs(sum(w.weight for w in result.weights) - 1.0) &lt; 1e-6</code></pre>
+<h3 id="integration-testsintegrationconftestpy">Integration <code>tests/integration/conftest.py</code><a href="#integration-testsintegrationconftestpy" class="heading-anchor" aria-label="Link">#</a></h3>
+<p>The integration conftest provides <strong>HTTP client and database mock fixtures</strong> for API endpoint tests.</p>
+<h4 id="client-fixture"><code>client</code> Fixture</h4>
+<pre class="highlight"><code class="language-python">@pytest_asyncio.fixture
+async def client() -&gt; AsyncClient:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        yield ac</code></pre>
+<p>Uses <code>httpx.ASGITransport</code> to wire the FastAPI app directly — no real network socket is opened.
+Each test gets a fresh client to prevent state leakage.</p>
+<h4 id="mock-db-session-helpers">Mock DB Session Helpers</h4>
+<p>Three factory functions build <code>AsyncMock</code> sessions for different query patterns:</p>
+<table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>make_mock_session()</code></td>
+<td>Write endpoints (POST /optimize) — no-ops on <code>add</code>, <code>flush</code>, <code>commit</code></td>
+</tr>
+<tr>
+<td><code>make_mock_session_for_list(runs, total)</code></td>
+<td>List queries — handles two <code>execute</code> calls: COUNT then rows</td>
+</tr>
+<tr>
+<td><code>make_mock_session_for_single(run)</code></td>
+<td>Single-row lookups — <code>scalar_one_or_none()</code> returns the run or <code>None</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="optimizationrun-factory"><code>OptimizationRun</code> Factory</h4>
+<pre class="highlight"><code class="language-python">def make_run(
+    run_id: str | None = None,
+    status: str = "completed",
+    tickers: list[str] | None = None,
+    budget: float = 100_000.0,
+    classical_sharpe: float | None = 1.25,
+    ...
+) -&gt; OptimizationRun:</code></pre>
+<p>Builds an in-memory <code>OptimizationRun</code> ORM object without touching the database.</p>
+<h4 id="standard-request-payloads">Standard Request Payloads</h4>
+<pre class="highlight"><code class="language-python">MINIMAL_REQUEST = {"tickers": ["AAPL", "MSFT"], "budget": 50_000.0, "run_quantum": False}
+STANDARD_REQUEST = {"tickers": ["AAPL", "MSFT", "GOOGL"], "budget": 100_000.0, "run_quantum": False}
+QUANTUM_REQUEST  = {"tickers": ["AAPL", "MSFT", "GOOGL"], "budget": 100_000.0, "run_quantum": True}
+FULL_REQUEST     = {... all optional fields including sector_constraints ...}</code></pre>
+<h4 id="db-override-helper">DB Override Helper</h4>
+<pre class="highlight"><code class="language-python">def override_db_with(session: AsyncMock):
+    async def _override():
+        yield session
+    return _override</code></pre>
+<p>Used with <code>app.dependency_overrides[get_db] = override_db_with(mock_session)</code> to inject mock
+sessions into FastAPI's dependency injection system.</p>
+<hr />
+<h2 id="test-file-inventory">Test File Inventory<a href="#test-file-inventory" class="heading-anchor" aria-label="Link">#</a></h2>
+<h3 id="api-endpoint-tests">API Endpoint Tests<a href="#api-endpoint-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_api_healthpy"><code>test_api_health.py</code></h4>
+<p>Tests for <code>GET /health</code>. Patches <code>_check_database</code>, <code>_check_redis</code>, and <code>_check_celery</code> to
+control service status without real connections.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_health_all_up_returns_200_healthy</code></td>
+<td>All services up → HTTP 200, <code>status=healthy</code></td>
+</tr>
+<tr>
+<td><code>test_health_response_shape</code></td>
+<td>Body has <code>status</code>, <code>version</code>, <code>services</code> fields</td>
+</tr>
+<tr>
+<td><code>test_health_services_shape</code></td>
+<td><code>services</code> has <code>database</code>, <code>redis</code>, <code>celery</code> keys</td>
+</tr>
+<tr>
+<td><code>test_health_all_down_returns_503_unhealthy</code></td>
+<td>All down → HTTP 503, <code>status=unhealthy</code></td>
+</tr>
+<tr>
+<td><code>test_health_db_down_returns_degraded</code></td>
+<td>DB down only → HTTP 200, <code>status=degraded</code></td>
+</tr>
+<tr>
+<td><code>test_health_redis_down_returns_degraded</code></td>
+<td>Redis down only → degraded</td>
+</tr>
+<tr>
+<td><code>test_health_celery_down_returns_degraded</code></td>
+<td>Celery down only → degraded</td>
+</tr>
+<tr>
+<td><code>test_health_version_is_semver_like</code></td>
+<td>Version string matches <code>\d+\.\d+\.\d+</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_api_assetspy"><code>test_api_assets.py</code></h4>
+<p>Tests for <code>GET /api/v1/assets/search</code>. Uses real in-memory asset registry; patches
+<code>_lookup_yfinance</code> for fallback tests.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_search_exact_ticker_returns_result</code></td>
+<td><code>q=AAPL</code> returns Apple Inc.</td>
+</tr>
+<tr>
+<td><code>test_search_aapl_returns_technology_sector</code></td>
+<td>AAPL has <code>sector=Technology</code>, <code>exchange=NASDAQ</code></td>
+</tr>
+<tr>
+<td><code>test_search_by_company_name</code></td>
+<td><code>q=Microsoft</code> returns MSFT</td>
+</tr>
+<tr>
+<td><code>test_search_case_insensitive_ticker</code></td>
+<td><code>q=nvda</code> == <code>q=NVDA</code></td>
+</tr>
+<tr>
+<td><code>test_search_limit_zero_returns_422</code></td>
+<td><code>limit=0</code> → 422 validation error</td>
+</tr>
+<tr>
+<td><code>test_search_limit_over_50_returns_422</code></td>
+<td><code>limit=51</code> → 422 validation error</td>
+</tr>
+<tr>
+<td><code>test_search_unknown_ticker_yfinance_fallback</code></td>
+<td>Unknown ticker triggers yfinance lookup</td>
+</tr>
+<tr>
+<td><code>test_search_unknown_ticker_yfinance_returns_none</code></td>
+<td>yfinance returns None → empty list</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_api_optimizepy"><code>test_api_optimize.py</code></h4>
+<p>Tests for <code>POST /api/v1/optimize</code>. Mocks the DB session and Celery task dispatch.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_optimize_valid_request_returns_202</code></td>
+<td>Valid request → HTTP 202</td>
+</tr>
+<tr>
+<td><code>test_optimize_returns_valid_uuid_run_id</code></td>
+<td><code>run_id</code> is a valid UUID string</td>
+</tr>
+<tr>
+<td><code>test_optimize_missing_tickers_returns_422</code></td>
+<td>Missing <code>tickers</code> → 422</td>
+</tr>
+<tr>
+<td><code>test_optimize_negative_budget_returns_422</code></td>
+<td><code>budget=-1</code> → 422</td>
+</tr>
+<tr>
+<td><code>test_optimize_celery_task_dispatched</code></td>
+<td><code>apply_async</code> called with correct args</td>
+</tr>
+<tr>
+<td><code>test_optimize_quantum_routes_to_quantum_queue</code></td>
+<td><code>run_quantum=True</code> → <code>queue="quantum"</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_api_runspy"><code>test_api_runs.py</code></h4>
+<p>Tests for <code>GET /api/v1/runs</code> and <code>GET /api/v1/runs/{run_id}</code>. Uses mock DB sessions.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_runs_empty_list_returns_200</code></td>
+<td>Empty DB → <code>{"items": [], "total": 0}</code></td>
+</tr>
+<tr>
+<td><code>test_runs_returns_paginated_list</code></td>
+<td>Returns correct <code>items</code>, <code>total</code>, <code>page</code></td>
+</tr>
+<tr>
+<td><code>test_runs_status_filter</code></td>
+<td><code>?status=completed</code> returns only completed runs</td>
+</tr>
+<tr>
+<td><code>test_runs_invalid_status_returns_422</code></td>
+<td><code>?status=invalid</code> → 422</td>
+</tr>
+<tr>
+<td><code>test_run_detail_returns_full_shape</code></td>
+<td>Detail endpoint returns all fields</td>
+</tr>
+<tr>
+<td><code>test_run_detail_unknown_id_returns_404</code></td>
+<td>Unknown <code>run_id</code> → 404 with <code>error_code</code></td>
+</tr>
+<tr>
+<td><code>test_run_status_completed_has_completed_at</code></td>
+<td>Completed run has <code>completed_at</code> timestamp</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_api_websocketpy"><code>test_api_websocket.py</code></h4>
+<p>Tests for <code>WS /ws/runs/{run_id}/progress</code>. Tests the <code>_safe_send_json</code> helper and
+Redis pub/sub message forwarding.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_safe_send_json_sends_data</code></td>
+<td>Calls <code>websocket.send_json</code> with data</td>
+</tr>
+<tr>
+<td><code>test_safe_send_json_swallows_exception</code></td>
+<td>RuntimeError on send → no raise</td>
+</tr>
+<tr>
+<td><code>test_safe_send_json_swallows_disconnect_error</code></td>
+<td><code>WebSocketDisconnect</code> → no raise</td>
+</tr>
+<tr>
+<td><code>test_websocket_accepts_connection</code></td>
+<td>WebSocket connection is accepted</td>
+</tr>
+<tr>
+<td><code>test_progress_message_forwarded</code></td>
+<td>Redis progress message → WebSocket client</td>
+</tr>
+<tr>
+<td><code>test_result_message_terminates_stream</code></td>
+<td><code>type=result</code> message closes stream</td>
+</tr>
+<tr>
+<td><code>test_error_message_terminates_stream</code></td>
+<td><code>type=error</code> message closes stream</td>
+</tr>
+<tr>
+<td><code>test_invalid_json_silently_skipped</code></td>
+<td>Malformed Redis message → skipped</td>
+</tr>
+</tbody>
+</table>
+<h3 id="task-queue-tests">Task Queue Tests<a href="#task-queue-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_celery_taskspy"><code>test_celery_tasks.py</code></h4>
+<p>Tests for <code>OptimizationTask</code> and Celery app configuration. Uses a mocked Redis client.</p>
+<pre class="highlight"><code class="language-python">def _make_task_instance() -&gt; OptimizationTask:
+    task = OptimizationTask()
+    task._redis_client = MagicMock()
+    task._redis_client.publish = MagicMock(return_value=1)
+    return task</code></pre>
+<table>
+<thead>
+<tr>
+<th>Test Group</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>publish_progress</code></td>
+<td>Channel name, JSON fields (<code>type</code>, <code>run_id</code>, <code>node</code>, <code>status</code>, <code>message</code>, <code>timestamp</code>), Redis exception swallowing</td>
+</tr>
+<tr>
+<td><code>publish_result</code></td>
+<td>Channel name, JSON fields (<code>type</code>, <code>run_id</code>, <code>result</code>), exception swallowing</td>
+</tr>
+<tr>
+<td><code>publish_error</code></td>
+<td>Channel name, JSON fields (<code>type</code>, <code>run_id</code>, <code>error_code</code>, <code>message</code>, <code>timestamp</code>), exception swallowing</td>
+</tr>
+<tr>
+<td>Celery app config</td>
+<td><code>default</code> and <code>quantum</code> queues, JSON serializer, UTC timezone, <code>prefetch_multiplier=1</code>, <code>acks_late=True</code>, <code>reject_on_worker_lost=True</code></td>
+</tr>
+<tr>
+<td>Task registration</td>
+<td><code>run_optimization_task</code> in <code>celery_app.tasks</code>, <code>max_retries=3</code>, <code>acks_late=True</code></td>
+</tr>
+<tr>
+<td>Redis lazy init</td>
+<td><code>redis_client</code> property creates client on first access, reuses on subsequent calls</td>
+</tr>
+</tbody>
+</table>
+<h3 id="optimization-engine-tests">Optimization Engine Tests<a href="#optimization-engine-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_classical_optimizerpy"><code>test_classical_optimizer.py</code></h4>
+<p>Unit tests for <code>ClassicalOptimizer</code> (Markowitz MVO via CVXPY).</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_optimize_3_assets_weights_sum_to_1</code></td>
+<td>Weights sum to 1.0 within tolerance</td>
+</tr>
+<tr>
+<td><code>test_optimize_sharpe_ratio_computed</code></td>
+<td>Sharpe ratio is positive</td>
+</tr>
+<tr>
+<td><code>test_max_weight_constraint_respected</code></td>
+<td>No weight exceeds <code>max_weight_per_asset</code></td>
+</tr>
+<tr>
+<td><code>test_min_return_constraint_respected</code></td>
+<td>Portfolio return ≥ <code>min_portfolio_return</code></td>
+</tr>
+<tr>
+<td><code>test_sector_limits_respected</code></td>
+<td>Sector allocation ≤ sector limit</td>
+</tr>
+<tr>
+<td><code>test_risk_tolerance_0_min_variance</code></td>
+<td><code>risk_tolerance=0</code> → minimum variance portfolio</td>
+</tr>
+<tr>
+<td><code>test_infeasible_constraints_raise_error</code></td>
+<td>Impossible constraints → <code>SolverInfeasibleError</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_classical_schemaspy"><code>test_classical_schemas.py</code></h4>
+<p>Pydantic v2 schema validation for <code>OptimizationConstraints</code>, <code>ClassicalOptimizationInput</code>,
+and <code>ClassicalOptimizationResult</code>.</p>
+<h4 id="test_quantum_qubopy"><code>test_quantum_qubo.py</code></h4>
+<p>Unit tests for <code>app.quantum.qubo</code> — QUBO matrix construction and evaluation.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_output_shape_is_n_by_n</code></td>
+<td><code>build_qubo_matrix</code> returns (n, n) array</td>
+</tr>
+<tr>
+<td><code>test_matrix_is_symmetric</code></td>
+<td>Q is symmetric</td>
+</tr>
+<tr>
+<td><code>test_qubo_energy_correct</code></td>
+<td>Energy matches manual quadratic form</td>
+</tr>
+<tr>
+<td><code>test_decode_bitstring_valid</code></td>
+<td>Bitstring → asset index list</td>
+</tr>
+<tr>
+<td><code>test_validate_qubo_solution_cardinality</code></td>
+<td>Validates k-asset selection</td>
+</tr>
+<tr>
+<td><code>test_qubo_to_dict_nonzero_entries</code></td>
+<td>Only non-zero entries in dict</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_engines_quantum_qubopy"><code>test_engines_quantum_qubo.py</code></h4>
+<p>Tests for the engines-layer QUBO wrapper (<code>app.engines.quantum.qubo</code>), including
+<code>QUBOMetadata</code>, <code>enumerate_all_solutions</code>, and <code>compute_approximation_ratio</code>.</p>
+<h4 id="test_engines_quantum_metricspy"><code>test_engines_quantum_metrics.py</code></h4>
+<p>Tests for <code>compute_quantum_portfolio_metrics</code>, <code>compute_quantum_solution_quality</code>,
+<code>compute_classical_vs_quantum_comparison</code>, and <code>select_best_quantum_result</code>.</p>
+<h4 id="test_qaoa_solverpy"><code>test_qaoa_solver.py</code></h4>
+<p>Unit tests for <code>QAOASolver</code> (Qiskit QAOA). Tests the greedy fallback path used in
+test environments where full quantum simulation is too slow.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name_is_qaoa</code></td>
+<td><code>solver.name == "QAOA"</code></td>
+</tr>
+<tr>
+<td><code>test_solve_returns_result</code></td>
+<td>Returns <code>QuantumAssetResult</code></td>
+</tr>
+<tr>
+<td><code>test_cardinality_enforced</code></td>
+<td>Exactly k assets selected</td>
+</tr>
+<tr>
+<td><code>test_greedy_fallback_selects_top_k</code></td>
+<td>Greedy selects highest-return assets</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_vqe_solverpy"><code>test_vqe_solver.py</code></h4>
+<p>Unit tests for <code>VQESolver</code> (PennyLane VQE). Similar structure to QAOA tests.</p>
+<h3 id="data-layer-tests">Data Layer Tests<a href="#data-layer-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_data_metricspy"><code>test_data_metrics.py</code></h4>
+<p>Unit tests for <code>app.data.metrics</code> — portfolio metrics computation.</p>
+<table>
+<thead>
+<tr>
+<th>Function Tested</th>
+<th>Scenarios</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>compute_portfolio_metrics</code></td>
+<td>Happy path, historical data path</td>
+</tr>
+<tr>
+<td><code>compute_max_drawdown</code></td>
+<td>Drawdown calculation</td>
+</tr>
+<tr>
+<td><code>compute_var</code> / <code>compute_cvar</code></td>
+<td>Value-at-Risk at 95% confidence</td>
+</tr>
+<tr>
+<td><code>compute_sharpe_ratio</code></td>
+<td>Positive and zero-volatility cases</td>
+</tr>
+<tr>
+<td><code>compute_efficient_frontier_points</code></td>
+<td>Returns list of (return, volatility) pairs</td>
+</tr>
+<tr>
+<td><code>annualise_returns</code> / <code>annualise_volatility</code></td>
+<td>Scaling by √252</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_data_sector_tagspy"><code>test_data_sector_tags.py</code></h4>
+<p>Unit tests for <code>app.data.sector_tags</code> — GICS sector classification.</p>
+<table>
+<thead>
+<tr>
+<th>Function Tested</th>
+<th>Scenarios</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_sector</code></td>
+<td>Known tickers (AAPL, MSFT, GOOGL), unknown tickers, case-insensitivity</td>
+</tr>
+<tr>
+<td><code>enrich_sector_map</code></td>
+<td>Priority: yfinance &gt; static &gt; fallback</td>
+</tr>
+<tr>
+<td><code>get_tickers_by_sector</code></td>
+<td>Known and unknown sectors</td>
+</tr>
+<tr>
+<td><code>is_valid_gics_sector</code></td>
+<td>Valid and invalid sector names</td>
+</tr>
+<tr>
+<td><code>normalise_sector_name</code></td>
+<td>Common aliases (e.g., "Tech" → "Information Technology")</td>
+</tr>
+</tbody>
+</table>
+<h3 id="schema-tests">Schema Tests<a href="#schema-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_classical_schemaspy_1"><code>test_classical_schemas.py</code></h4>
+<p>Pydantic v2 validation for classical optimization schemas.</p>
+<h4 id="test_quantum_schemaspy"><code>test_quantum_schemas.py</code></h4>
+<p>Pydantic v2 validation for quantum optimization schemas including
+<code>QuantumOptimizationConstraints</code>, <code>QuantumOptimizationInput</code>, <code>QuantumAssetResult</code>,
+and <code>QuantumOptimizationResult</code>.</p>
+<h4 id="test_schemas_multi_objectivepy"><code>test_schemas_multi_objective.py</code></h4>
+<p>Tests for multi-objective and efficient frontier schema additions:</p>
+<table>
+<thead>
+<tr>
+<th>Schema</th>
+<th>Tests</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BusinessObjective</code></td>
+<td>Field bounds, defaults</td>
+</tr>
+<tr>
+<td><code>FrontierConfig</code></td>
+<td>Distinct-axis validator, <code>num_points</code> bounds</td>
+</tr>
+<tr>
+<td><code>OptimizationRequest</code></td>
+<td>Duplicate objective names rejected, all-disabled rejected, zero-sum weights rejected, back-compat with legacy payloads</td>
+</tr>
+<tr>
+<td><code>FrontierPoint</code></td>
+<td>Defaults and required fields</td>
+</tr>
+<tr>
+<td><code>FrontierReport</code></td>
+<td>Required fields, optional indices</td>
+</tr>
+</tbody>
+</table>
+<h3 id="agent-graph-tests">Agent Graph Tests<a href="#agent-graph-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_agent_graphpy"><code>test_agent_graph.py</code></h4>
+<p>Integration tests for the LangGraph agent graph routing functions and the full
+<code>run_agent_graph</code> pipeline.</p>
+<pre class="highlight"><code class="language-python">def _make_state(**kwargs: Any) -&gt; AgentState:
+    base: AgentState = {
+        "run_id": str(uuid.uuid4()),
+        "tickers": ["AAPL", "MSFT", "GOOGL"],
+        "budget": 100_000.0,
+        "request_params": {"run_quantum": True},
+    }
+    base.update(kwargs)
+    return base</code></pre>
+<table>
+<thead>
+<tr>
+<th>Test Group</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_route_after_fatal_node</code></td>
+<td>Returns <code>"end"</code> when both <code>error</code> and <code>failed_node</code> are set; <code>"continue"</code> otherwise</td>
+</tr>
+<tr>
+<td><code>_route_after_classical</code></td>
+<td>Returns <code>"end"</code> on any failure, <code>"quantum"</code> when enabled, <code>"skip_quantum"</code> when disabled or too many assets</td>
+</tr>
+<tr>
+<td><code>_should_run_quantum</code></td>
+<td>Returns <code>"quantum"</code> for small portfolios, <code>"skip_quantum"</code> when disabled or exceeds <code>MAX_QUANTUM_ASSETS</code></td>
+</tr>
+<tr>
+<td><code>AgentState</code> TypedDict</td>
+<td>Required fields, optional error fields default to <code>None</code></td>
+</tr>
+<tr>
+<td><code>run_agent_graph</code></td>
+<td>Full pipeline with mocked nodes, failed data_fetch, non-fatal quantum failure</td>
+</tr>
+<tr>
+<td><code>_state_to_run_detail</code></td>
+<td>Extracts QAOA/VQE sharpe, handles invalid quantum_result, includes failed_node in error_message</td>
+</tr>
+</tbody>
+</table>
+<h3 id="integration-tests">Integration Tests<a href="#integration-tests" class="heading-anchor" aria-label="Link">#</a></h3>
+<h4 id="test_integration_optimizationpy"><code>test_integration_optimization.py</code></h4>
+<p>End-to-end tests exercising real code paths (no mocking) for the optimization pipeline.</p>
+<pre class="highlight"><code class="language-python">TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN"]
+MU = [0.12, 0.10, 0.09, 0.15]
+SIGMA = [[0.04, 0.01, 0.008, 0.012], ...]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_full_pipeline_produces_valid_portfolio</code></td>
+<td>Classical optimizer → valid metrics</td>
+</tr>
+<tr>
+<td><code>test_quantum_dispatcher_end_to_end</code></td>
+<td>QUBO → QAOA + VQE → combined result</td>
+</tr>
+<tr>
+<td><code>test_classical_vs_quantum_comparison</code></td>
+<td>Both engines on same universe</td>
+</tr>
+<tr>
+<td><code>test_quantum_dispatcher_asset_limit</code></td>
+<td><code>QuantumAssetLimitError</code> for too many assets</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_objectives_frontier_wiringpy"><code>test_objectives_frontier_wiring.py</code></h4>
+<p>Tests for multi-objective optimizer and efficient frontier node wiring.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_run_markowitz_mvo_with_objectives</code></td>
+<td>Objectives matrix applied correctly</td>
+</tr>
+<tr>
+<td><code>test_compute_frontier_happy_path</code></td>
+<td>Returns list of (volatility, return) pairs</td>
+</tr>
+<tr>
+<td><code>test_compute_frontier_unsupported_measure</code></td>
+<td><code>ValueError</code> for unknown measure</td>
+</tr>
+<tr>
+<td><code>test_frontier_node_skips_when_disabled</code></td>
+<td><code>frontier.enabled=False</code> → state unchanged</td>
+</tr>
+<tr>
+<td><code>test_frontier_node_runs_when_enabled</code></td>
+<td><code>frontier.enabled=True</code> → <code>frontier_report</code> populated</td>
+</tr>
+<tr>
+<td><code>test_frontier_node_nonfatal_on_error</code></td>
+<td>Solver error → non-fatal, state continues</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="test-directory-structure">Test Directory Structure<a href="#test-directory-structure" class="heading-anchor" aria-label="Link">#</a></h2>
+<pre class="highlight"><code>tests/
+├── __init__.py
+├── conftest.py                    # Shared numpy/pandas fixtures
+├── test_agent_graph.py            # Agent graph routing + run_agent_graph
+├── test_api_assets.py             # GET /api/v1/assets/search
+├── test_api_health.py             # GET /health
+├── test_api_optimize.py           # POST /api/v1/optimize
+├── test_api_runs.py               # GET /api/v1/runs + /runs/{id}
+├── test_api_websocket.py          # WS /ws/runs/{id}/progress
+├── test_celery_tasks.py           # OptimizationTask + Celery config
+├── test_classical_optimizer.py    # ClassicalOptimizer (CVXPY)
+├── test_classical_schemas.py      # Classical Pydantic schemas
+├── test_data_metrics.py           # Portfolio metrics computation
+├── test_data_sector_tags.py       # GICS sector classification
+├── test_engines_quantum_metrics.py # Quantum metrics + comparison
+├── test_engines_quantum_qubo.py   # Engines-layer QUBO wrapper
+├── test_integration_optimization.py # Full pipeline integration
+├── test_objectives_frontier_wiring.py # Multi-objective + frontier
+├── test_qaoa_solver.py            # QAOA solver (Qiskit)
+├── test_quantum_qubo.py           # Core QUBO formulation
+├── test_quantum_schemas.py        # Quantum Pydantic schemas
+├── test_schemas_multi_objective.py # Multi-objective API schemas
+├── test_vqe_solver.py             # VQE solver (PennyLane)
+├── test_e2e_smoke.py              # Full pipeline smoke tests
+├── test_load.py                   # Concurrent load tests
+├── integration/
+│   ├── conftest.py                # HTTP client + DB mock fixtures
+│   ├── test_agent_graph.py
+│   ├── test_assets_endpoint.py
+│   ├── test_celery_tasks.py
+│   ├── test_health_endpoint.py
+│   ├── test_optimize_endpoint.py
+│   └── test_runs_endpoint.py
+├── e2e/
+│   ├── smoke_test.py              # ASGI + live-server smoke tests
+│   └── locustfile.py              # Locust load test scenarios
+└── unit/
+    ├── test_classical_optimizer.py
+    ├── test_data_cache.py
+    ├── test_data_fetcher.py
+    ├── test_data_metrics.py
+    ├── test_db_models.py
+    ├── test_qaoa_optimizer.py
+    ├── test_qubo_formulator.py
+    ├── test_sector_tags.py
+    └── test_vqe_optimizer.py</code></pre>
+<hr />
+<h2 id="coverage-configuration">Coverage Configuration<a href="#coverage-configuration" class="heading-anchor" aria-label="Link">#</a></h2>
+<p>Coverage is configured in <code>backend/pyproject.toml</code>:</p>
+<pre class="highlight"><code class="language-toml">[tool.coverage.run]
+source = ["app"]
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]</code></pre>
+<p>See <a href="test-coverage.html">Test Coverage</a> for coverage targets and CI gate configuration.</p>
+<blockquote>
+<p><strong>Note:</strong> The <code>asyncio_mode = "auto"</code> setting in <code>pyproject.toml</code> means all <code>async def</code>
+test functions are automatically run as asyncio coroutines. The <code>@pytest.mark.asyncio</code>
+decorator is still used in many test files for explicit documentation, but it is not
+strictly required.</p>
+</blockquote>
+<div class="page-nav">
+<a href="README.html"><div class="nav-label">← Previous</div><div class="nav-title">Testing</div></a>
+<a href="e2e-smoke-tests.html" class="nav-next"><div class="nav-label">Next →</div><div class="nav-title">E2E and Smoke Tests</div></a>
+</div>
+<div class="last-updated">Generated by SASVA AI &mdash; 2026-06-15</div>
+</main>
+<aside class="toc-aside">
+<div class="toc-title">On this page</div>
+<a href="#pytest-configuration" class="" data-anchor="pytest-configuration">pytest Configuration</a>
+<a href="#running-the-suite" class="toc-h3" data-anchor="running-the-suite">Running the Suite</a>
+<a href="#conftestpy-fixtures" class="" data-anchor="conftestpy-fixtures">conftest.py Fixtures</a>
+<a href="#root-testsconftestpy" class="toc-h3" data-anchor="root-testsconftestpy">Root tests/conftest.py</a>
+<a href="#integration-testsintegrationconftestpy" class="toc-h3" data-anchor="integration-testsintegrationconftestpy">Integration tests/integration/conftest.py</a>
+<a href="#test-file-inventory" class="" data-anchor="test-file-inventory">Test File Inventory</a>
+<a href="#api-endpoint-tests" class="toc-h3" data-anchor="api-endpoint-tests">API Endpoint Tests</a>
+<a href="#task-queue-tests" class="toc-h3" data-anchor="task-queue-tests">Task Queue Tests</a>
+<a href="#optimization-engine-tests" class="toc-h3" data-anchor="optimization-engine-tests">Optimization Engine Tests</a>
+<a href="#data-layer-tests" class="toc-h3" data-anchor="data-layer-tests">Data Layer Tests</a>
+<a href="#schema-tests" class="toc-h3" data-anchor="schema-tests">Schema Tests</a>
+<a href="#agent-graph-tests" class="toc-h3" data-anchor="agent-graph-tests">Agent Graph Tests</a>
+<a href="#integration-tests" class="toc-h3" data-anchor="integration-tests">Integration Tests</a>
+<a href="#test-directory-structure" class="" data-anchor="test-directory-structure">Test Directory Structure</a>
+<a href="#coverage-configuration" class="" data-anchor="coverage-configuration">Coverage Configuration</a>
+</aside>
+<button class="back-to-top" id="back-to-top" title="Back to top">↑</button>
+<div class="mermaid-overlay" id="mermaid-overlay">
+  <div class="mermaid-overlay-inner" id="mermaid-overlay-inner"></div>
+</div>
+<script>
+mermaid.initialize({startOnLoad:true,theme:"dark",securityLevel:"loose",flowchart:{useMaxWidth:true,htmlLabels:true},themeVariables:{primaryColor:"#1f6feb",primaryTextColor:"#e6edf3",primaryBorderColor:"#58a6ff",lineColor:"#8b949e",secondaryColor:"#21262d",tertiaryColor:"#161b22"}});
+hljs.highlightAll();
+</script>
+<script>
+(function(){
+  var currentPath = location.pathname;
+  var links = document.querySelectorAll('#sidebar-nav-links a');
+  for(var i=0;i<links.length;i++){
+    var href = links[i].getAttribute('href');
+    if(!href) continue;
+    // Resolve the href to an absolute path for accurate comparison
+    // This handles both relative (../section/page.html) and same-dir (page.html) links
+    var a = document.createElement('a');
+    a.href = href;
+    if(a.pathname === currentPath){
+      links[i].classList.add('active');
+    }
+  }
+  var idx=[{"t": "Environment Variables", "p": "01-getting-started/environment-variables.html", "h": ["Quick Setup", "Complete Variable Reference", "Database", "Redis", "Celery", "OpenAI", "Application", "Quantum Engine", "Data / Caching", "Portfolio Metrics", "How Settings Are Loaded", "Validation Rules", "Docker Compose Environment", "Related Pages"]}, {"t": "Project Overview", "p": "01-getting-started/overview.html", "h": ["The Three Optimization Paradigms", "1. Classical Optimization — Markowitz Mean-Variance", "2. Quantum Optimization — QAOA and VQE", "3. Agent Layer — LangGraph Orchestration", "Key Capabilities", "Multi-Objective Optimization", "Real-Time Progress Streaming", "Efficient Frontier Visualization", "LLM-Powered Explanations", "Run History", "Technology Highlights", "Project Structure", "Next Steps"]}, {"t": "Podman Notes", "p": "01-getting-started/podman-notes.html", "h": ["The Problem: Rootless Podman UID Namespace Issue", "Symptom", "Root Cause: User Namespace Mapping", "Docker Desktop Incompatibility", "Workaround for Docker Desktop", "Summary: Which Command to Use", "Verifying the Fix", "Additional Podman Considerations", "SSL/TLS in Podman on macOS", "Volume Permissions", "Related Pages"]}, {"t": "Quickstart: Docker Compose", "p": "01-getting-started/quickstart-docker.html", "h": ["Prerequisites", "Step 1 — Clone and Configure", "Step 2 — Build and Start All Services", "Step 3 — Verify Services Are Running", "Step 4 — Run Your First Optimization", "Using the Frontend", "Using the API Directly", "Service Architecture", "Useful Commands", "View logs", "Restart a single service", "Run database migrations manually", "Open a PostgreSQL shell", "Open a Redis CLI", "Run the test suite", "Stop all services", "Adjusting Worker Concurrency", "Troubleshooting", "Backend fails to start — \"could not connect to server\"", "Frontend shows \"EPERM: operation not permitted\""]}, {"t": "Quickstart: Local Development", "p": "01-getting-started/quickstart-local.html", "h": ["Prerequisites", "Step 1 — Start Infrastructure Services", "Option A: Docker Compose (infrastructure only)", "Option B: Homebrew (macOS)", "Option C: System packages (Ubuntu/Debian)", "Step 2 — Configure Environment Variables", "Step 3 — Set Up the Python Backend", "Create a virtual environment", "Install dependencies", "Run database migrations", "Start the FastAPI server", "Step 4 — Start the Celery Worker", "Step 5 — Set Up the Frontend", "Step 6 — Verify the Full Stack", "Running Tests", "Development Workflow", "Backend hot-reload", "Frontend hot-reload", "Code quality tools", "Creating a new migration"]}, {"t": "Overview", "p": "01-overview/README.html", "h": ["About This Section", "Section Contents", "What Is Portfolio Optimizer?", "Key Capabilities", "Where to Go Next"]}, {"t": "Agent Pipeline", "p": "02-architecture/agent-pipeline.html", "h": ["Graph Structure", "1. Skip-on-prior-fatal-error", "2. Progress Event Publishing", "3. Unexpected Exception Handling", "Node Descriptions", "Conditional Routing Functions", "Progress Callback Mechanism", "Node Timing", "Error State Schema", "Related Pages"]}, {"t": "Request Lifecycle", "p": "02-architecture/request-lifecycle.html", "h": ["Overview", "Phase 1: HTTP Submission (202 Async Pattern)", "Phase 2: WebSocket Connection", "Phase 3: Redis Pub/Sub Bridge", "Phase 4: Agent Graph Execution", "Phase 5: Terminal Message Types", "Retry and Timeout Policy", "Database Status Transitions", "Polling Alternative", "Related Pages"]}, {"t": "System Overview", "p": "02-architecture/system-overview.html", "h": ["Architecture at a Glance", "Service Topology", "The Three Optimization Paradigms", "1. Classical Convex Optimization (CVXPY / Markowitz MVO)", "2. Quantum Simulation (Qiskit QAOA + PennyLane VQE)", "3. Agent Orchestration (LangGraph)", "Data Flow Summary", "How the Three Paradigms Interact", "Key Source Files", "Related Pages"]}, {"t": "Technology Decisions", "p": "02-architecture/technology-decisions.html", "h": ["FastAPI (Web Framework)", "1. Native Async Support", "2. Pydantic v2 Integration", "3. Dependency Injection", "LangGraph (Agent Orchestration)", "Why a Graph, Not a Simple Pipeline?", "Stateful Shared Context", "Observability", "CVXPY (Classical Optimization)", "DCP Guarantees", "Multi-Objective Scalarization", "Solver Flexibility", "Qiskit + PennyLane (Quantum Simulation)", "Qiskit for QAOA", "PennyLane for VQE", "Graceful Degradation", "Redis (Cache + Pub/Sub + Broker)", "Role 1: Price Data Cache (DB 0)", "Role 2: Progress Event Bus (DB 0, pub/sub)", "Role 3: Celery Broker + Result Backend (DB 1, DB 2)"]}, {"t": "Getting Started", "p": "02-getting-started/README.html", "h": ["Section Contents", "Prerequisites", "Quickstart (Docker — Recommended)", "Choosing Your Setup Method", "Next Steps"]}, {"t": "Architecture", "p": "03-architecture/README.html", "h": ["Section Contents", "Architecture at a Glance", "Key Design Principles", "Cross-References"]}, {"t": "Backend Core", "p": "03-backend/README.html", "h": ["Section Contents", "Backend Architecture", "Key Files", "Cross-References"]}, {"t": "Application Factory", "p": "03-backend/application-factory.html", "h": ["Overview", "FastAPI Instance Configuration", "CORS Configuration", "Exposed Metrics", "Endpoint", "Graceful Degradation", "Exception Handler Registration", "Domain Exception Handler", "Catch-All Handler", "Registered Routers", "Lifespan Context Manager", "Startup Sequence", "Shutdown Sequence", "Error Response Format", "Related Pages"]}, {"t": "Configuration", "p": "03-backend/configuration.html", "h": ["Overview", "Settings Fields Reference", "Database", "Redis", "OpenAI", "Application", "Quantum Engine", "Data / Caching", "Portfolio Metrics", "Usage Pattern", "Variable Precedence", "Test Cache Clearing Pattern", "Full Settings Example", "Related Pages"]}, {"t": "Dependencies", "p": "03-backend/dependencies.html", "h": ["Overview", "Usage in Route Handlers", "Usage in Other Dependencies", "Connection Pool Configuration", "Pool Lifecycle", "Usage in Route Handlers", "Transaction Management", "Lazy Import", "Usage in Route Handlers", "Session Configuration", "Dependency Override in Tests", "All Dependency Types at a Glance", "Related Pages"]}, {"t": "Exceptions", "p": "03-backend/exceptions.html", "h": ["Exception Hierarchy", "Data Layer Exceptions", "Optimization Layer Exceptions", "Agent Layer Exceptions", "Error Code to HTTP Status Mapping", "Raising Exceptions in Practice", "Related Pages"]}, {"t": "Logging", "p": "03-backend/logging.html", "h": ["Overview", "Shared Processors", "Environment-Specific Renderer", "Silenced Third-Party Loggers", "Structured Log Events", "Log Fields Convention", "Event Names", "Common Fields", "Environment-Specific Log Levels", "Usage Examples", "Basic Info Log", "Warning with Context", "Error with Exception Info", "Binding Context Variables", "Integration with Standard Library Logging", "Related Pages"]}, {"t": "API Reference", "p": "04-api/README.html", "h": ["Section Contents", "Base URL", "API Overview", "Authentication", "Async Pattern", "Cross-References"]}, {"t": "API Reference", "p": "04-api-reference/README.html", "h": ["Section Contents", "Base URL", "Endpoint Summary", "Authentication", "Async Request Pattern", "Cross-References"]}, {"t": "GET /api/v1/assets/search", "p": "04-api-reference/assets-endpoint.html", "h": ["Overview", "Query Parameters", "Response Schema", "AssetSearchResult Fields", "Search Behavior", "Tier 1: Curated In-Memory List", "Tier 2: yfinance Fallback", "Rate Limiting Considerations", "Example Requests and Responses", "Search by Ticker Prefix", "Search by Company Name", "Search with Multiple Results", "Unknown Ticker (yfinance Fallback)", "No Results Found", "Error Responses", "Related Endpoints"]}, {"t": "Error Codes Reference", "p": "04-api-reference/error-codes.html", "h": ["Error Response Format", "Complete Error Code Table", "Domain Error Codes", "Run-Specific Error Codes", "Status Filter Error Codes", "WebSocket Error Codes", "Detailed Error Code Descriptions", "DATA_FETCH_ERROR", "CACHE_ERROR", "CONSTRAINT_VIOLATION", "SOLVER_INFEASIBLE", "QUANTUM_TIMEOUT", "QUANTUM_ASSET_LIMIT_EXCEEDED", "AGENT_EXECUTION_ERROR", "RUN_NOT_FOUND", "Validation Errors (422)", "HTTP Status Code Summary", "Client Handling Recommendations", "General Recommendations", "Related Pages"]}, {"t": "GET /api/v1/health", "p": "04-api-reference/health-endpoint.html", "h": ["Overview", "Top-Level Fields", "ServiceStatus Fields", "Status Values", "Service Check Implementation", "Database Check", "Redis Check", "Celery Check", "Example Responses", "Healthy (All Services Up)", "Degraded (Redis Down)", "Unhealthy (All Services Down)", "Docker Health Check Integration", "Kubernetes Probe Configuration", "Related Endpoints"]}, {"t": "POST /api/v1/optimize", "p": "04-api-reference/optimize-endpoint.html", "h": ["Overview", "Request Body Schema", "Required Fields", "Optional Fields", "BusinessObjective Schema", "FrontierConfig Schema", "SectorConstraint Schema", "Validation Rules", "Response Schema", "202 Accepted", "Async Pattern Explanation", "Celery Queue Routing", "Example Requests", "Minimal Request (Classical Only)", "Full Multi-Objective Request with Frontier", "Request with Sector Constraints", "Example Response", "Error Responses", "Related Endpoints", "Related Documentation"]}, {"t": "Run History Endpoints", "p": "04-api-reference/runs-endpoints.html", "h": ["Endpoints Summary", "GET /api/v1/runs", "Query Parameters", "OptimizationRunSummary Schema", "Example Request", "Example Response", "GET /api/v1/runs/{run_id}", "Path Parameters", "ClassicalResult Schema", "QuantumResult Schema", "QAOAResult Schema", "VQEResult Schema", "AssetWeight Schema", "PortfolioMetrics Schema", "ComparisonSummary Schema", "Example Response (Completed Run)", "GET /api/v1/runs/{run_id}/status", "Path Parameters", "Run Lifecycle States", "Polling Strategy"]}, {"t": "WS /ws/runs/{run_id}/progress", "p": "04-api-reference/websocket-endpoint.html", "h": ["Overview", "Connection Lifecycle", "Connection Parameters", "Message Types", "Terminal Message Handling", "Complete Message Sequence Example", "Client Implementation Example", "JavaScript / TypeScript", "Python (websockets library)", "Redis Pub/Sub Architecture", "Related Endpoints"]}, {"t": "Agent Layer", "p": "05-agent-layer/README.html", "h": ["Section Contents", "Agent Graph Structure", "State Lifecycle", "Cross-References"]}, {"t": "Agent State", "p": "05-agent-layer/agent-state.html", "h": ["State Lifecycle", "Field Groups", "Input Fields", "Data Fetch Node Outputs", "Constraint Validation Node Outputs", "Classical Optimization Node Outputs", "Quantum Dispatch Node Outputs", "Comparison Node Outputs", "Frontier Computation Node Outputs", "LLM Explanation Node Outputs", "Progress Tracking Fields", "Error Handling Fields", "State Mutation Pattern", "Related Pages"]}, {"t": "Error Routing", "p": "05-agent-layer/error-routing.html", "h": ["Fatal vs Non-Fatal Node Classification", "Skip Conditions", "Skip Conditions", "Complete Routing Decision Tree", "Error State Propagation", "Error Details in API Response", "Related Pages"]}, {"t": "Graph Definition", "p": "05-agent-layer/graph-definition.html", "h": ["Node Registration", "1. Prior-Error Skip", "2. Progress Callback", "3. Unexpected Exception Propagation", "Entry Point", "Edge Definitions", "Conditional Edges", "Unconditional Edges", "Compiled Graph — Execution Flow", "Related Pages", "Cross-References"]}, {"t": "Node: Classical Optimization", "p": "05-agent-layer/node-classical.html", "h": ["Responsibility", "Node Signature", "Standard Markowitz MVO", "Multi-Objective Extension", "Timing Recording", "Logged Metrics", "Error Handling", "Routing After Classical Optimization", "Related Pages", "Classical Optimization Cross-References"]}, {"t": "Node: Comparison", "p": "05-agent-layer/node-comparison.html", "h": ["Responsibility", "Node Signature", "Sharpe Improvement Calculation", "Return and Volatility Differences", "Recommendation Generation", "Recommendation Tiers", "Example Recommendations", "Handling Missing Classical Result", "Non-Fatal Error Handling", "Routing After Comparison", "Related Pages"]}, {"t": "Node: Constraint Validation", "p": "05-agent-layer/node-constraint-validation.html", "h": ["Responsibility", "Node Signature", "Weight Constraint Validation", "Sector Constraint Normalisation", "Objective Weight Normalisation", "Constraint Warnings List", "Hard vs Soft Violations", "Error Handling", "Related Pages"]}, {"t": "Node: Data Fetch", "p": "05-agent-layer/node-data-fetch.html", "h": ["Responsibility", "Node Signature", "yfinance Call", "Log Returns Computation", "Annualised Statistics", "PSD Correction", "Data Quality Filtering", "Sector Map Population", "Redis Cache Key Strategy", "Error Handling", "State Updates on Success", "Related Pages"]}, {"t": "Node: Frontier Computation", "p": "05-agent-layer/node-frontier.html", "h": ["When This Node Runs", "Responsibility", "Node Signature", "Supported Measures", "Epsilon-Constraint Algorithm", "Step 1: Anchor Solves", "Step 2: Parametric Sweep", "Step 3: Dominance Filtering", "Step 4: Knee Point Detection", "Non-Fatal Error Handling", "Defensive No-Op", "Related Pages"]}, {"t": "Node: LLM Explanation", "p": "05-agent-layer/node-llm-explanation.html", "h": ["Responsibility", "Node Signature", "GPT-4o Prompt Construction", "Prompt Variables", "Template-Based Fallback", "Paragraph 1: Classical Result Summary", "Paragraph 2: Quantum Comparison", "Paragraph 3: Constraint Warnings", "Fallback on Node Exception", "LLM Fallback on API Failure", "Output Format", "Related Pages"]}, {"t": "Node: Quantum Dispatch", "p": "05-agent-layer/node-quantum-dispatch.html", "h": ["Responsibility", "Node Signature", "QUBO Construction", "QUBO Parameters from Constraints", "QAOA Execution (Qiskit)", "VQE Execution (PennyLane)", "Parallel vs Sequential Execution", "Non-Fatal Error Handling", "Related Pages", "Quantum Optimization Cross-References"]}, {"t": "Classical Optimization", "p": "05-classical-optimization/README.html", "h": ["Section Contents", "What Is Classical Optimization?", "The Optimization Problem", "Cross-References"]}, {"t": "Classical Optimization", "p": "06-classical-optimization/README.html", "h": ["Section Contents", "What Is Classical Optimization?", "The Optimization Problem", "Cross-References"]}, {"t": "Optimization Constraints", "p": "06-classical-optimization/constraints.html", "h": ["Constraint Overview", "Core Constraints (Always Applied)", "Optional Constraints", "Return and Volatility Thresholds", "Sector Allocation Limits", "Example: Technology Sector Cap", "Per-Objective Hard Thresholds", "Threshold Validation", "Threshold Examples", "Constraint Validation Pipeline", "Validation Checks", "Objective Weight Validation", "Constraint Infeasibility Handling", "Complete Constraint Reference", "See Also"]}, {"t": "Efficient Frontier", "p": "06-classical-optimization/efficient-frontier.html", "h": ["Algorithm Overview", "Step 1: Anchor Solves", "Step 2: Epsilon Grid", "Step 3: Parametric Sweep", "Step 4: Sort and Filter", "Step 5: Pareto Dominance Flagging", "Step 6: Knee Point Detection", "Parameter Reference", "Supported Measures", "Validation", "Reference Indices", "Example Output", "Parameters", "Raises", "Base Constraints in the Sweep", "Performance Considerations", "Typical Performance", "Solver Fallback", "Edge Cases", "Integration with the Agent Pipeline"]}, {"t": "Markowitz Mean-Variance Optimization", "p": "06-classical-optimization/markowitz-mvo.html", "h": ["Mathematical Formulation", "Standard Markowitz Objective", "Legacy vs. Multi-Objective Paths", "Annualised Metrics", "CVXPY Variable and Parameter Setup", "Key CVXPY Constructs", "Covariance Matrix Regularization", "Parameters", "Constraints Dict Keys", "Returns", "Raises", "Solve Time Measurement", "Solver Status Handling", "Solver Priority", "Status Codes", "Post-Solve Weight Cleanup", "Metrics Computation", "Example Output", "Complete Usage Example", "Logging"]}, {"t": "Multi-Objective Optimization", "p": "06-classical-optimization/multi-objective.html", "h": ["Field Reference", "Threshold Semantics", "Example: Three-Row Objective Matrix", "Weight Auto-Normalization", "Scalarized Weighted-Sum Objective Construction", "Objective Matrix → CVXPY Objective Flow", "Non-Convex / Deferred Measures", "Deferred Measure Handling", "Convex vs. Deferred Measures Summary", "Back-Compatibility: Legacy Scalar Fields", "See Also"]}, {"t": "Quantum Optimization", "p": "06-quantum-optimization/README.html", "h": ["Section Contents", "What Is Quantum Optimization?", "Practical Limits", "Cross-References"]}, {"t": "Agent Layer", "p": "07-agent-layer/README.html", "h": ["Section Contents", "Agent Graph Structure", "State Flow", "Cross-References"]}, {"t": "Quantum Optimization", "p": "07-quantum-optimization/README.html", "h": ["Section Contents", "Quantum Optimization Pipeline", "Practical Limits", "Cross-References"]}, {"t": "QAOA Solver", "p": "07-quantum-optimization/qaoa-solver.html", "h": ["Overview", "Parameters", "Raises", "Step-by-Step Algorithm", "Step 2: Instantiate QAOA with Sampler", "Step 3: Solve and Extract Binary Solution", "Step 4: Timeout Check", "Step 5: Cardinality Enforcement", "Step 6: Equal-Weight Portfolio Metrics", "Circuit Depth", "Greedy Fallback", "Logging", "Configuration", "Related Pages"]}, {"t": "Quantum Dispatcher", "p": "07-quantum-optimization/quantum-dispatcher.html", "h": ["Responsibilities", "Parameters", "Constraints Dict Keys", "Raises", "Shared QUBO Matrix", "Both Solvers Always Attempted", "Logging", "Configuration Reference", "Integration with the Agent Pipeline", "Related Pages"]}, {"t": "Quantum vs Classical Optimization", "p": "07-quantum-optimization/quantum-vs-classical.html", "h": ["When Quantum Optimization Is Applicable", "Applicability Criteria", "Small Portfolios (≤ 8 Assets)", "Current Limitations", "Simulator Only — No Real Quantum Hardware", "Equal-Weight Portfolios", "Approximation Quality", "Greedy Fallback", "Sharpe Comparison Methodology", "Computation", "Recommendation Thresholds", "Example Comparison Output", "Detailed Comparison Metrics", "Expected Performance Characteristics", "Typical Results on Simulator", "Solve Time", "When Quantum Outperforms Classical", "Future Roadmap", "Near-Term (Planned)", "Medium-Term (Research)"]}, {"t": "QUBO Formulation", "p": "07-quantum-optimization/qubo-formulation.html", "h": ["Problem Statement", "QUBO Matrix Structure", "Three-Term Construction", "Term 1: Return Maximisation (Diagonal)", "Term 2: Risk Minimisation (Diagonal + Upper Triangle)", "Term 3: Cardinality Constraint Penalty", "Normalisation", "Matrix Shape and Properties", "API Reference", "Tuning Guidelines", "Related Pages"]}, {"t": "VQE Solver", "p": "07-quantum-optimization/vqe-solver.html", "h": ["Overview", "QUBO → Ising Transformation", "Parameters", "Raises", "Variational Ansatz", "Gradient-Based Optimisation", "Binary Solution Extraction", "Cardinality Enforcement and Portfolio Metrics", "PennyLane Device Setup", "Greedy Fallback", "Logging", "VQE vs QAOA: Key Differences", "Related Pages"]}, {"t": "Data Layer", "p": "08-data-layer/README.html", "h": ["Section Contents", "Data Pipeline Overview", "Key Design Decisions", "Cross-References"]}, {"t": "Market Data Fetcher", "p": "08-data-layer/market-data-fetcher.html", "h": ["Overview", "Parameters", "Returns", "Raises", "Ticker Normalization", "Multi-Index Column Handling", "Retry Strategy", "Per-Ticker Fallback", "Data Quality Filtering", "NaN Filtering", "Gap Filling", "Minimum Trading Days", "Log Returns Computation", "Annualized Statistics", "Expected Returns", "Covariance Matrix", "Positive Semi-Definite Correction", "Usage Example", "Related Pages"]}, {"t": "Portfolio Metrics", "p": "08-data-layer/portfolio-metrics.html", "h": ["Overview", "Parameters", "Weight Normalization", "Core Metrics", "Expected Return", "Volatility", "Sharpe Ratio", "Volatility Computation", "Maximum Drawdown", "Calmar Ratio", "Value at Risk (VaR)", "Conditional Value at Risk (CVaR)", "Sortino Ratio", "Diversification Ratio", "Field Reference", "Usage Example", "Standalone Utility Functions", "Efficient Frontier Points", "Constants", "Related Pages"]}, {"t": "Redis Caching", "p": "08-data-layer/redis-caching.html", "h": ["Architecture", "Cache Key Construction", "Key Format", "Key Properties", "Pickle Serialization", "Cache Hit / Miss Logging", "Log Events Reference", "Synchronous Redis Client", "Connection Pooling", "Namespace Prefixing", "Graceful Degradation", "Cache Invalidation", "When to Invalidate", "Namespace Flush (Testing)", "Redis Database Allocation", "Related Pages"]}, {"t": "Sector Classification", "p": "08-data-layer/sector-classification.html", "h": ["Overview", "GICS Sectors", "Why a Static Map?", "Example", "Helper Functions", "Constraint Flow", "Example Request with Sector Constraints", "Sector Summary in API Responses", "Related Pages"]}, {"t": "Database", "p": "09-database/README.html", "h": ["Section Contents", "Database Overview", "Key Design Decisions", "Cross-References"]}, {"t": "Async Session — `AsyncSessionLocal` and `DbDep`", "p": "09-database/async-session.html", "h": ["Architecture Overview", "Connection Pool Parameters", "Session Factory Parameters", "Transaction Lifecycle", "Summary Table", "Connection Pool Sizing", "Recommended Settings by Environment", "Related Pages"]}, {"t": "Database Migrations", "p": "09-database/migrations.html", "h": ["Migration Chain", "Directory Structure", "Key Configuration", "Async Migration Flow", "Offline Mode", "Migration 001 — Initial Schema", "Running Migrations", "Apply All Pending Migrations", "Apply a Specific Revision", "Check Current Revision", "View Migration History", "Downgrade Procedure", "Downgrade One Step", "Downgrade to a Specific Revision", "Downgrade to Empty Database", "Autogenerate Workflow", "Step-by-Step", "What Autogenerate Can Detect", "Docker / CI Integration", "Related Pages"]}, {"t": "ORM Models — `OptimizationRun`", "p": "09-database/orm-models.html", "h": ["Class Hierarchy", "Table Arguments", "Column Definitions", "Lifecycle Methods", "Properties", "Full Lifecycle Example", "Testing", "Related Pages"]}, {"t": "Database Schema — `optimization_runs`", "p": "09-database/schema.html", "h": ["Table Overview", "Column Reference", "Primary Key", "Identity", "Status", "Request Inputs", "Denormalized Sharpe Columns", "Error Handling", "Timestamps", "Check Constraints", "Indexes", "Design Decisions", "JSON Blobs for Results", "Denormalized Sharpe Columns", "Related Pages"]}, {"t": "Task Queue", "p": "10-task-queue/README.html", "h": ["Section Contents", "Task Queue Architecture", "Queue Design", "Cross-References"]}, {"t": "Celery Configuration", "p": "10-task-queue/celery-configuration.html", "h": ["Application Factory", "Redis Database Allocation", "Serialization Settings", "Task Routing Configuration", "Reliability Settings", "Time Limits", "Task State Tracking", "Result Expiry", "Concurrency Environment Variables", "Beat Scheduler Setup", "Worker Lifecycle Signals", "Complete Configuration Reference", "Related Pages"]}, {"t": "Optimization Task", "p": "10-task-queue/optimization-task.html", "h": ["Architecture Overview", "Why Lazy Initialization?", "Publishing Methods", "Task Registration", "Task Lifecycle", "Phase 1: Pending → Running", "Phase 2: Running — Agent Graph Execution", "Phase 3: Running → Completed", "Phase 4: Async Bridge", "Retry Policy", "Database Persistence Helpers", "Related Pages"]}, {"t": "Progress Events", "p": "10-task-queue/progress-events.html", "h": ["Architecture", "Channel Naming", "Message Types", "Timestamp Format", "WebSocket Bridge", "Connection Lifecycle", "Key Implementation Details", "Timeout Behavior", "Event Ordering Guarantees", "Debugging", "Related Pages"]}, {"t": "Queue Routing", "p": "10-task-queue/queue-routing.html", "h": ["The Problem: Slow Quantum Jobs Block Fast Classical Runs", "Queue Definitions", "Routing Decision", "Worker Services", "Production Worker Configuration", "Concurrency Tuning", "Environment Variables", "Recommended Values by Host Size", "Horizontal Scaling", "Task ID Equals Run ID", "Monitoring Queue Depth", "Related Pages"]}, {"t": "Workers (Task Queue)", "p": "10-workers/README.html", "h": ["Section Contents", "Task Queue Architecture", "Queue Design", "Cross-References"]}, {"t": "Frontend", "p": "11-frontend/README.html", "h": ["Section Contents", "Technology Stack", "Application Structure", "Cross-References"]}, {"t": "API Client", "p": "11-frontend/api-client.html", "h": ["Base URL Configuration", "Environment Variables", "Behavior", "Exported Functions", "Error Handling Pattern", "Request Flow Diagram", "Related Pages"]}, {"t": "Components", "p": "11-frontend/components.html", "h": ["Component Hierarchy", "OptimizeForm", "Props", "Behavior", "ConstraintForm", "Props", "Form Sections", "Default Values", "Objective Catalogue", "Validation", "Usage", "SectorConstraintRow", "Props", "Behavior", "AssetSearchCombobox", "Props", "Behavior", "Accessibility", "AgentProgressPanel", "Props"]}, {"t": "Custom Hooks", "p": "11-frontend/hooks.html", "h": ["Hook Overview", "useOptimize", "Return Type", "Implementation", "Store Update", "Toast Notifications", "Usage", "useWebSocket", "Return Type", "Parameters", "Connection Lifecycle", "Reconnection Logic", "Message Dispatch", "Cleanup", "Usage", "useRunHistory", "Return Type", "Implementation", "Query Key", "Placeholder Data"]}, {"t": "Pages", "p": "11-frontend/pages.html", "h": ["Route Definitions", "Route Table", "Application Bootstrap", "DashboardPage", "Layout", "State Management", "Results Panel Logic", "Connection Badge", "Submit Button", "HistoryPage", "Layout", "Key Features", "RunDetailPage", "Layout", "Status-Driven Rendering", "Polling Behavior", "Sub-Components", "Frontier Report", "NotFoundPage", "Page Navigation Flow"]}, {"t": "Frontend Project Structure", "p": "11-frontend/project-structure.html", "h": ["Directory Layout", "Vite Configuration", "Dev-Server Proxy", "Build Chunking", "TypeScript Configuration", "Strict Mode Flags", "Path Mapping", "Tailwind CSS Setup", "Content Paths", "Design Tokens", "Custom Animations", "Plugin", "shadcn/ui Component Library", "Installed Primitives", "ESLint Configuration", "Key Rules", "Prettier Configuration", "NPM Scripts", "Key Dependencies"]}, {"t": "State Management", "p": "11-frontend/state-management.html", "h": ["Store Location", "State Shape", "Actions", "Store Creation", "Selector Helpers", "Usage with Selectors", "Run Lifecycle State Machine", "State Descriptions", "Usage Patterns", "Reading State in Components", "Dispatching Actions from Hooks", "Subscribing to a Single Field", "Why Zustand?", "Related Pages"]}, {"t": "Type Definitions", "p": "11-frontend/type-definitions.html", "h": ["File Location", "Enumerations", "Request Types", "Portfolio Result Types", "Efficient Frontier Types", "Run Types", "WebSocket Message Union Types", "Asset Search Types", "Health Type", "Type Relationships", "Related Pages"]}, {"t": "Configuration", "p": "12-configuration/README.html", "h": ["Section Contents", "Configuration Overview", "Key Configuration Categories", "Cross-References"]}, {"t": "Schemas & Validation", "p": "12-schemas/README.html", "h": ["Section Contents", "Schema Overview", "Key Models", "Cross-References"]}, {"t": "Request Schemas", "p": "12-schemas/request-schemas.html", "h": ["Overview", "Type Aliases", "Fields", "Field Validation", "Threshold Semantics", "Example", "Fields", "Example", "Fields", "Example", "Fields", "Validators", "Complete Request Example", "Legacy Request Example (Backward Compatible)", "Schema Relationships", "See Also"]}, {"t": "Response Schemas", "p": "12-schemas/response-schemas.html", "h": ["Overview", "Type Aliases", "Shared Sub-Models", "Solver Result Models", "Efficient Frontier Models", "Run Lifecycle Models", "Additional Response Models", "Schema Inheritance Diagram", "JSON Serialization Notes", "See Also"]}, {"t": "Validation Rules", "p": "12-schemas/validation-rules.html", "h": ["Validation Architecture", "Field-Level Constraints", "Behavior", "Error Messages", "Behavior", "Error Message", "Rule 1: No Duplicate Objective Names", "Rule 2: At Least One Enabled Objective", "Rule 3: Positive Weight Sum", "Rule 4: Weight Sum ≤ 1.0 (with tolerance)", "Weight Sum Tolerance Table", "Behavior", "Normalization Decision Table", "Synthesized Matrix Structure", "Validation Error Format", "Validator Execution Order Summary", "Common Validation Scenarios", "Scenario 1: Valid Multi-Objective Request", "Scenario 2: Legacy Request Auto-Normalized", "Scenario 3: Validation Failures"]}, {"t": "Deployment", "p": "13-deployment/README.html", "h": ["Section Contents", "Deployment Options", "AWS Production Architecture", "CI/CD Integration", "Cross-References"]}, {"t": "Testing", "p": "13-testing/README.html", "h": ["Section Contents", "Testing Strategy", "Running Tests", "Coverage Thresholds", "Cross-References"]}, {"t": "Backend Tests", "p": "13-testing/backend-tests.html", "h": ["pytest Configuration", "Running the Suite", "Test File Inventory", "API Endpoint Tests", "Task Queue Tests", "Optimization Engine Tests", "Data Layer Tests", "Schema Tests", "Agent Graph Tests", "Integration Tests", "Test Directory Structure", "Coverage Configuration"]}, {"t": "E2E and Smoke Tests", "p": "13-testing/e2e-smoke-tests.html", "h": ["Directory Structure", "Architecture", "Fixtures", "Smoke Test Scenarios", "Live Server Mode", "Running Against a Live Stack", "Scenarios Covered (25 total)", "Design Principles", "Load Test Scenarios", "User Classes", "Running Locust", "Test Data", "Running All E2E Tests", "Against ASGI Transport (No External Services)", "Against a Live Stack", "Integration Tests", "Mocking Strategy"]}, {"t": "Frontend Tests", "p": "13-testing/frontend-tests.html", "h": ["Vitest Configuration", "Running the Suite", "Agent Progress Messages", "Portfolio Data", "Run Detail Fixtures", "Request Fixture", "1. Component Rendering", "3. React Query Wrapper", "4. Router Wrapper", "Test File Inventory", "Component Tests", "Hook Tests", "Store Tests", "API Client Tests", "Utility Tests", "Test Directory Structure", "Mocking Patterns", "Mocking API Modules", "Mocking Global APIs", "Mocking React Hooks"]}, {"t": "Test Coverage", "p": "13-testing/test-coverage.html", "h": ["Backend Coverage", "Configuration", "Running Coverage", "Reading the Coverage Report", "Excluded Paths", "Frontend Coverage", "Configuration", "Running Coverage", "Excluded Paths", "Coverage Targets", "CI Coverage Gate", "Backend Gate", "Frontend Gate", "CI Pipeline Integration", "Coverage Report Interpretation", "Understanding Branch Coverage", "Common Coverage Gaps", "Viewing HTML Coverage Report", "Practical Tips", "Finding Untested Code Quickly"]}, {"t": "Infrastructure", "p": "14-infrastructure/README.html", "h": ["Section Contents", "Infrastructure Overview", "Environments", "Cross-References"]}, {"t": "AWS Architecture", "p": "14-infrastructure/aws-architecture.html", "h": ["High-Level Architecture Diagram", "VPC and Networking", "Subnet Layout", "Traffic Flow", "NAT Gateway Strategy", "ECS Fargate Services", "Service Specifications", "ECS Cluster", "Deployment Strategy", "Auto-Scaling Policies", "Application Load Balancer", "Listener Configuration", "Path-Based Routing", "TLS Configuration", "Health Checks", "RDS PostgreSQL 16 (Multi-AZ)", "ElastiCache Redis 7 (Replication Group)", "ECR Image Repositories", "IAM OIDC for GitHub Actions", "AWS Secrets Manager"]}, {"t": "Docker Compose — Development Stack", "p": "14-infrastructure/docker-compose.html", "h": ["Service Overview", "Redis Database Allocation", "Service Definitions", "Volume Mounts Summary", "Health Check Dependency Chain", "Parallelism and Concurrency", "Quick Start", "Related Documentation", "CI/CD Integration"]}, {"t": "Environments", "p": "14-infrastructure/environments.html", "h": ["Directory Structure", "Bootstrap Module", "What Bootstrap Creates", "S3 State Bucket", "DynamoDB State Lock Table", "GitHub Actions OIDC", "Running Bootstrap", "Staging Environment", "Staging Configuration Values", "Production Environment", "Production Configuration Values", "Staging vs Production Comparison", "Deployment Workflow", "First-Time Setup", "Updating an Environment", "Destroying an Environment", "State File Isolation", "Related Documentation"]}, {"t": "Terraform Modules", "p": "14-infrastructure/terraform-modules.html", "h": ["Module Dependency Map", "Resources Created", "NAT Gateway Strategy", "Inputs", "Outputs", "Security Groups", "Inputs", "Outputs", "Resources Created", "Repository Configuration", "Inputs", "Outputs", "Resources Created", "PostgreSQL Configuration", "Instance Settings", "Inputs", "Outputs", "Resources Created", "Redis Configuration", "Replication Group Settings"]}, {"t": "Terraform Overview", "p": "14-infrastructure/terraform-overview.html", "h": ["Directory Structure", "Provider Configuration", "Remote State (S3 Backend)", "Data Sources", "Sub-Module Instantiation Order", "All Sub-Modules Instantiated", "Root Module Variables", "Root Module Outputs", "Usage", "Related Documentation", "CI/CD Cross-References"]}, {"t": "Testing", "p": "14-testing/README.html", "h": ["Section Contents", "Testing Strategy", "Running Tests", "Coverage Thresholds", "Cross-References"]}, {"t": "CI/CD Pipelines", "p": "15-cicd/README.html", "h": ["Section Contents", "Pipeline Overview", "CI Pipeline Stages", "CD Pipeline Stages", "Cross-References"]}, {"t": "CD Workflow (`cd.yml`)", "p": "15-cicd/cd-workflow.html", "h": ["Overview", "Triggers", "Concurrency Group", "OIDC Authentication", "How OIDC Works", "Jobs", "Deployment Flow Summary", "Required Secrets and Variables", "Rollback", "Related Pages"]}, {"t": "CI Workflow (`ci.yml`)", "p": "15-cicd/ci-workflow.html", "h": ["Overview", "Triggers", "Concurrency Group", "Caching Strategy", "Python (pip) Cache", "Node.js (npm) Cache", "Jobs", "Full Workflow File", "Related Pages"]}, {"t": "GitHub Secrets & Variables", "p": "15-cicd/github-secrets.html", "h": ["Overview", "How to Set Secrets and Variables", "Via GitHub Web UI", "Via GitHub CLI", "Via Terraform Bootstrap Outputs", "Complete Reference", "AWS Identity", "Load Balancer URLs", "ECS Configuration", "ECR Registry", "Terraform State Backend", "Application Secrets", "DNS and TLS", "Monitoring and Alerting", "Workflow Usage Reference", "Security Best Practices", "Principle of Least Privilege", "Secret Rotation", "Never Commit Secrets", "Audit Secret Access"]}, {"t": "Terraform Workflow (`terraform.yml`)", "p": "15-cicd/terraform-workflow.html", "h": ["Overview", "Triggers", "Concurrency Group", "OIDC Authentication", "Terraform State Backend", "Jobs", "Infrastructure Modules", "Required Secrets", "Bootstrap: First-Time Setup", "Terraform Version", "Related Pages"]}, {"t": "Monitoring & Observability", "p": "15-monitoring/README.html", "h": ["Section Contents", "Observability Stack", "Key Metrics", "Cross-References"]}, {"t": "Observability", "p": "16-observability/README.html", "h": ["Section Contents", "Observability Stack", "Key Metrics", "Cross-References"]}, {"t": "Alertmanager", "p": "16-observability/alertmanager.html", "h": ["Architecture", "Global Configuration", "Required Environment Variables", "Routing Configuration", "Root Route (Catch-All)", "Child Routes", "Notification Channels (Receivers)", "Alert Rules", "Service Availability", "High Error Rate", "Slow Optimization", "Worker Queue Backup", "Redis Memory Pressure", "PostgreSQL Connection Exhaustion", "Watchdog (Heartbeat)", "Inhibition Rules", "Silences", "Creating a Silence via the UI", "Creating a Silence via the API", "Expiring a Silence"]}, {"t": "Grafana Dashboards", "p": "16-observability/grafana-dashboards.html", "h": ["Dashboard Overview", "Datasource Configuration", "Row 1: 🌐 API Overview", "Stat Panels (top row)", "Time Series Panels", "Row 2: ⚙️ Optimization Runs", "Stat Panels", "Time Series Panels", "Row 3: ⚛️ Quantum Jobs (Celery Worker)", "Stat Panels", "Time Series Panels", "Row 4: 🗄️ Redis Cache", "Stat Panels", "Time Series Panels", "Row 5: 🐘 PostgreSQL", "Stat Panels", "Time Series Panels", "Row 6: 🔍 Prometheus Self-Monitoring", "Alert Thresholds Summary", "Importing and Exporting Dashboards"]}, {"t": "Logging Guide", "p": "16-observability/logging-guide.html", "h": ["Configuration", "Shared Processors", "Renderer Selection", "Log Formats", "Production (JSON)", "Development (Console)", "Getting a Logger", "Standard Log Fields", "Log Levels Per Component", "Key Log Events Reference", "Application Lifecycle", "Agent Graph", "Data Fetch Node", "Constraint Validation Node", "LLM Explainer", "Log Aggregation Recommendations", "CloudWatch Logs (AWS)", "Grafana Loki", "Elasticsearch / OpenSearch", "Docker (local development)"]}, {"t": "Prometheus Metrics", "p": "16-observability/prometheus-metrics.html", "h": ["Architecture Overview", "Scrape Configuration", "HTTP Metrics (prometheus-fastapi-instrumentator)", "Celery Metrics (celery-prometheus-exporter)", "Redis Metrics (redis_exporter)", "PostgreSQL Metrics (postgres_exporter)", "Recording Rules", "Related Pages", "Operations Cross-References"]}, {"t": "Security", "p": "16-security/README.html", "h": ["Overview", "Security Architecture", "Key Security Controls", "Production Hardening Checklist", "Cross-References"]}, {"t": "Contributing", "p": "17-contributing/README.html", "h": ["Overview", "Development Setup", "Code Style", "Backend (Python)", "Frontend (TypeScript)", "Branching Strategy", "Pull Request Workflow", "Commit Conventions", "Cross-References"]}, {"t": "Operations & Runbook", "p": "17-operations/README.html", "h": ["Section Contents", "Operations Overview", "Common Operations", "Cross-References"]}, {"t": "Configuration Reference", "p": "17-operations/configuration-reference.html", "h": ["Application Environment Variables", "Database", "Redis", "OpenAI", "Application", "Quantum Engine", "Data and Caching", "Portfolio Metrics", "Docker Compose Environment Variables", "Terraform Variables", "Project Identity", "Networking", "Database (RDS PostgreSQL)", "ElastiCache Redis", "ALB / DNS / TLS", "ECS Task Sizing", "ECS Desired Counts and Auto-Scaling", "Application Config (passed to ECS tasks)", "CloudWatch", "ECR"]}, {"t": "Deployment Guide", "p": "17-operations/deployment-guide.html", "h": ["Prerequisites", "Phase 1 — Bootstrap Terraform State", "Step 1.1 — Navigate to the bootstrap directory", "Step 1.2 — Initialize Terraform (local backend)", "Step 1.3 — Review the plan", "Step 1.4 — Apply the bootstrap", "Step 1.5 — Capture outputs", "Phase 2 — Configure GitHub Secrets and Variables", "Step 2.1 — Set AWS identity variables", "Step 2.2 — Set Terraform state backend variables", "Step 2.3 — Set application secrets", "Step 2.4 — Set DNS and TLS variables", "Step 2.5 — Set ECR registry variable", "Step 2.6 — Create GitHub environments", "Phase 3 — Provision Infrastructure with Terraform", "Step 3.1 — Trigger the Terraform workflow", "Step 3.2 — Monitor the workflow", "Step 3.3 — Capture Terraform outputs for GitHub variables", "Phase 4 — First Deployment (Push to Main)", "Step 4.1 — Push to main"]}, {"t": "Operational Runbook", "p": "17-operations/runbook.html", "h": ["Scaling Workers", "Adjust Celery Concurrency (Docker Compose / Local)", "Adjust ECS Desired Count (Production)", "Adjust Auto-Scaling Bounds via Terraform", "Database Backup and Restore", "Automated Backups", "Manual Snapshot (Before Risky Operations)", "Restore from Snapshot", "Point-in-Time Recovery (PITR)", "Run Database Migrations Manually", "Downgrade Migration (Rollback Schema)", "Redis Cache Management", "Flush Market Data Cache", "Flush Entire Cache Database 0 (Market Data Only)", "Check Cache Statistics", "Inspect a Specific Cache Entry", "Redis Failover (ElastiCache)", "Rolling Deployment Procedure", "Standard Rolling Deployment (via CD Pipeline)", "Manual Rolling Deployment"]}, {"t": "Troubleshooting", "p": "17-operations/troubleshooting.html", "h": ["Quantum Optimization Issues", "Data Fetch Issues", "Optimization Solver Issues", "WebSocket Issues", "WebSocket Connection Drops", "Celery Worker Issues", "Worker Not Picking Up Tasks", "Worker Memory Exhaustion", "Database Migration Failures", "Health Check Failures", "Service Fails Health Checks After Deployment", "Observability Quick Reference", "Related Pages"]}, {"t": "Portfolio Optimizer — Classical + Quantum + Agent-First", "p": "index.html", "h": ["Quick Links", "What Is Portfolio Optimizer?", "Architecture Overview", "Technology Stack", "Documentation Sections", "🚀 Getting Started", "🏗️ Architecture", "⚙️ Backend Core", "📡 API Reference", "🤖 Agent Layer", "📊 Classical Optimization", "⚛️ Quantum Optimization", "🗄️ Data Layer", "🗃️ Database", "⚙️ Task Queue", "🖥️ Frontend", "📋 Schemas &amp; Validation", "🧪 Testing", "🏗️ Infrastructure", "🔄 CI/CD Pipelines"]}];
+  var searchInput=document.getElementById('doc-search');
+  var searchResults=document.getElementById('search-results');
+  var navLinks=document.getElementById('sidebar-nav-links');
+  if(!searchInput||!searchResults||!navLinks)return;
+  var depth=(location.pathname.match(/\//g)||[]).length;
+  var prefix='';
+  var docsIdx=location.pathname.indexOf('/docs/');
+  if(docsIdx>=0){var after=location.pathname.substring(docsIdx+6);var parts=after.split('/');prefix='../'.repeat(Math.max(0,parts.length-1));}
+  searchInput.addEventListener('input',function(){
+    var q=this.value.toLowerCase().trim();
+    if(!q){searchResults.innerHTML='';navLinks.style.display='';return;}
+    navLinks.style.display='none';
+    var hits=[];
+    for(var i=0;i<idx.length;i++){
+      var item=idx[i];var score=0;
+      if(item.t.toLowerCase().indexOf(q)>=0)score+=10;
+      for(var j=0;j<item.h.length;j++){if(item.h[j].toLowerCase().indexOf(q)>=0)score+=3;}
+      if(score>0)hits.push({item:item,score:score});
+    }
+    hits.sort(function(a,b){return b.score-a.score;});
+    var html='';
+    for(var k=0;k<Math.min(hits.length,15);k++){
+      var h=hits[k].item;
+      html+='<a href="'+prefix+h.p+'">'+h.t+'</a>';
+      var mh=[];for(var m=0;m<h.h.length;m++){if(h.h[m].toLowerCase().indexOf(q)>=0)mh.push(h.h[m]);}
+      for(var n=0;n<Math.min(mh.length,2);n++){html+='<div class="search-heading">↳ '+mh[n]+'</div>';}
+    }
+    if(!hits.length)html='<div style="padding:8px 12px;color:var(--text-dim);font-size:0.8rem">No results</div>';
+    searchResults.innerHTML=html;
+  });
+})();
+</script>
+<script>
+(function(){
+  // Mermaid expand buttons — added AFTER mermaid renders (so button is on wrapper, not inside pre)
+  var overlay=document.getElementById('mermaid-overlay');
+  var overlayInner=document.getElementById('mermaid-overlay-inner');
+  function _addMermaidButtons(){
+    document.querySelectorAll('.mermaid,pre.mermaid').forEach(function(el){
+      if(el.dataset.expandAdded)return;
+      el.dataset.expandAdded='1';
+      // Wrap in a div so the button is a sibling of pre, not inside it
+      var wrapper=document.createElement('div');
+      wrapper.style.cssText='position:relative;display:inline-block;width:100%;';
+      el.parentNode.insertBefore(wrapper,el);
+      wrapper.appendChild(el);
+      var btn=document.createElement('button');
+      btn.className='mermaid-expand';btn.textContent='⛶';btn.title='Expand diagram';
+      btn.addEventListener('click',function(e){
+        e.stopPropagation();
+        var clone=el.cloneNode(true);
+        delete clone.dataset.expandAdded;
+        clone.removeAttribute('data-expand-added');
+        clone.style.cssText='background:none;border:none;padding:0;margin:0;text-align:center;min-width:70vw;max-width:90vw;';
+        // Clear overlay content safely, keep close button
+        overlayInner.innerHTML='';
+        var closeBtn=document.createElement('button');
+        closeBtn.className='mermaid-overlay-close';closeBtn.textContent='×';closeBtn.title='Close';
+        closeBtn.addEventListener('click',function(){overlay.classList.remove('open');});
+        overlayInner.appendChild(clone);
+        overlayInner.appendChild(closeBtn);
+        overlay.classList.add('open');
+        // Re-run mermaid on the clone after it's in the DOM
+        setTimeout(function(){
+          if(window.mermaid){
+            try{mermaid.run({nodes:[clone]});}catch(err){}
+          }
+        },50);
+      });
+      wrapper.appendChild(btn);
+    });
+  }
+  // Wait for mermaid to finish rendering before adding buttons (mermaid init runs above)
+  setTimeout(_addMermaidButtons,800);
+  if(overlay){
+    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.classList.remove('open');});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')overlay.classList.remove('open');});
+  }
+  // Code copy buttons
+  document.querySelectorAll('pre').forEach(function(pre){
+    if(pre.classList.contains('mermaid'))return;
+    var btn=document.createElement('button');
+    btn.className='code-copy';btn.textContent='Copy';
+    btn.addEventListener('click',function(){
+      var code=pre.querySelector('code');
+      var text=code?code.textContent:pre.textContent;
+      navigator.clipboard.writeText(text).then(function(){btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy';},2000);});
+    });
+    pre.appendChild(btn);
+  });
+  // Back to top
+  var btt=document.getElementById('back-to-top');
+  if(btt){
+    window.addEventListener('scroll',function(){btt.style.display=window.scrollY>300?'flex':'none';});
+    btt.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+  }
+  // TOC active scroll tracking
+  var tocLinks=document.querySelectorAll('.toc-aside a[data-anchor]');
+  if(tocLinks.length>0){
+    var headingEls=[];
+    tocLinks.forEach(function(l){var el=document.getElementById(l.dataset.anchor);if(el)headingEls.push({el:el,link:l});});
+    var tocAside=document.querySelector('.toc-aside');
+    var onScroll=function(){
+      var scrollPos=window.scrollY+80;
+      var active=null;
+      for(var i=0;i<headingEls.length;i++){if(headingEls[i].el.offsetTop<=scrollPos)active=headingEls[i];}
+      tocLinks.forEach(function(l){l.classList.remove('toc-active');});
+      if(active){
+        active.link.classList.add('toc-active');
+        // Scroll active link into view within the TOC panel, not the page
+        if(tocAside){
+          var linkTop=active.link.offsetTop-tocAside.offsetTop;
+          var visibleTop=tocAside.scrollTop;
+          var visibleBottom=visibleTop+tocAside.clientHeight;
+          if(linkTop<visibleTop+40||linkTop>visibleBottom-40){
+            tocAside.scrollTop=linkTop-tocAside.clientHeight/2;
+          }
+        }
+      }
+    };
+    window.addEventListener('scroll',onScroll);
+    onScroll();
+    // Prevent TOC links from scrolling the TOC panel to top on click
+    tocLinks.forEach(function(l){
+      l.addEventListener('click',function(e){
+        e.preventDefault();
+        var anchor=l.dataset.anchor;
+        var target=document.getElementById(anchor);
+        if(target){target.scrollIntoView({behavior:'smooth',block:'start'});}
+      });
+    });
+  }
+  // Persist sidebar scroll position across page navigations
+  var sidebarEl=document.querySelector('nav.sidebar');
+  if(sidebarEl){
+    var sidebarKey='sasva-sidebar-scroll';
+    // Restore scroll position on page load
+    var savedScroll=sessionStorage.getItem(sidebarKey);
+    if(savedScroll){sidebarEl.scrollTop=parseInt(savedScroll,10);}
+    // Save scroll position before navigating away
+    document.querySelectorAll('#sidebar-nav-links a').forEach(function(a){
+      a.addEventListener('click',function(){
+        sessionStorage.setItem(sidebarKey,String(sidebarEl.scrollTop));
+      });
+    });
+    // Also scroll active item into view on load
+    var activeLink=sidebarEl.querySelector('a.active');
+    if(activeLink&&!savedScroll){
+      var linkOffset=activeLink.offsetTop-sidebarEl.offsetTop;
+      sidebarEl.scrollTop=Math.max(0,linkOffset-sidebarEl.clientHeight/2);
+    }
+  }
+})();
+</script>
+</body>
+</html>

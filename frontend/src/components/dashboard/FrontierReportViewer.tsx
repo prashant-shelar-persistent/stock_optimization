@@ -25,8 +25,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   TrendingUp,
   Star,
-  Zap,
-  Shield,
+  // Zap,
+  // Shield,
   Clock,
   MessageSquare,
 } from "lucide-react";
@@ -104,7 +104,7 @@ function ScatterChart({
     return Array.from({ length: n }, (_, i) => yMin + (yRange * i) / (n - 1));
   }, [yMin, yRange]);
 
-  const specialIndices = new Set([kneeIdx, maxSharpeIdx, minRiskIdx].filter((i) => i != null));
+  // const specialIndices = new Set([kneeIdx, maxSharpeIdx, minRiskIdx].filter((i) => i != null));
 
   return (
     <div className="w-full overflow-x-auto">
@@ -166,7 +166,7 @@ function ScatterChart({
           const isKnee = i === kneeIdx;
           const isMaxSharpe = i === maxSharpeIdx;
           const isMinRisk = i === minRiskIdx;
-          const isSpecial = isKnee || isMaxSharpe || isMinRisk;
+          // const isSpecial = isKnee || isMaxSharpe || isMinRisk;
 
           if (isKnee) {
             // Star shape for knee

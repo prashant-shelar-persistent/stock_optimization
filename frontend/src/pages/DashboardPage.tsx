@@ -10,21 +10,30 @@
  *   │                  │  - ComparisonDashboard (complete)  │
  *   │                  │  - Empty state (idle)              │
  *   └──────────────────┴───────────────────────────────────┘
+ *                                          ┌─────────────────┐
+ *                                          │  ChatAssistant  │  ← fixed bottom-right
+ *                                          │  floating panel │
+ *                                          └─────────────────┘
+ *                                                    [●]  ← FAB toggle
  *
  * State management:
  *   - currentRunId and optimizationResult come from uiStore
  *   - WebSocket is opened via useWebSocket(currentRunId)
  *   - Agent progress events are accumulated in uiStore.agentProgress
+ *   - Chat panel state lives in chatStore (toggled by the FAB in ChatAssistant)
+ *   - On chat confirmation, ChatAssistant calls uiStore.startNewRun(runId)
+ *     which triggers the WebSocket + progress pipeline automatically
  */
 
 import { Link } from "react-router-dom";
-import { BarChart3, History, Wifi, WifiOff, Loader2, Zap, BarChart2 } from "lucide-react";
+import { BarChart3, History, Wifi, WifiOff, Loader2, BarChart2 } from "lucide-react";
 import { useUIStore } from "@/store/uiStore";
 import { useOptimize } from "@/hooks/useOptimize";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { ConstraintForm } from "@/components/dashboard/ConstraintForm";
 import { AgentProgressPanel } from "@/components/dashboard/AgentProgressPanel";
 import { ComparisonDashboard } from "@/components/dashboard/ComparisonDashboard";
+import { ChatAssistant } from "@/components/chat/ChatAssistant";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,7 +79,8 @@ function EmptyState() {
       </h3>
       <p className="mt-1.5 max-w-sm text-sm text-muted-foreground/70">
         Configure your portfolio constraints in the form on the left, then click{" "}
-        <strong>Run Optimization</strong> to start.
+        <strong>Run Optimization</strong> to start — or use the{" "}
+        <strong>chat assistant</strong> in the bottom-right corner.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-3 text-xs text-muted-foreground/60">
         <span className="flex items-center gap-1">
@@ -257,6 +267,22 @@ export default function DashboardPage() {
           </section>
         </div>
       </main>
+
+      {/*
+       * ── ChatAssistant floating panel ──
+       *
+       * Rendered outside the main content grid so it can be positioned
+       * fixed in the bottom-right corner of the viewport.
+       *
+       * The ChatAssistant component renders two elements:
+       *   1. The sliding chat panel (fixed bottom-20 right-4)
+       *   2. The FAB toggle button (fixed bottom-4 right-4)
+       *
+       * When the user confirms a run via the chat, ChatAssistant calls
+       * uiStore.startNewRun(runId) which triggers the WebSocket connection
+       * and the AgentProgressPanel above automatically.
+       */}
+      <ChatAssistant />
     </div>
   );
 }

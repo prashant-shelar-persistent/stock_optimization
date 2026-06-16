@@ -241,9 +241,9 @@ describe("addAgentProgress", () => {
     expect(getStore().agentProgress).toHaveLength(2);
   });
 
-  it("handles a full pipeline of 12 messages (6 nodes × 2 statuses)", () => {
+  it("handles a full pipeline of 14 messages (7 nodes × 2 statuses)", () => {
     FULL_PIPELINE_PROGRESS.forEach((msg) => getStore().addAgentProgress(msg));
-    expect(getStore().agentProgress).toHaveLength(12);
+    expect(getStore().agentProgress).toHaveLength(14);
   });
 });
 

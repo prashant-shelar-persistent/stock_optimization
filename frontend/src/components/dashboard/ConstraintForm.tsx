@@ -422,7 +422,7 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
 
   // ── Core state ──
   const [tickers, setTickers] = useState<string[]>(DEFAULT_TICKERS);
-  const [budget, setBudget] = useState(DEFAULT_BUDGET);
+  const [_budget, setBudget] = useState(DEFAULT_BUDGET);
   const [budgetInput, setBudgetInput] = useState(DEFAULT_BUDGET_DISPLAY);
   const [budgetTouched, setBudgetTouched] = useState(false);
 

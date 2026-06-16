@@ -21,7 +21,7 @@ export type AgentNodeName =
   | "frontier_computation"
   | "llm_explanation";
 
-// ── Multi-objective & frontier shared enums ─────────────────────────────────
+// ── Multi-objective & frontier shared enums ────────────────────────────────────
 
 /**
  * All measure names accepted in the `objectives` matrix.
@@ -49,7 +49,7 @@ export type FrontierMeasureName =
 
 export type ObjectiveDirection = "maximize" | "minimize";
 
-// ── Request types ─────────────────────────────────────────────────────────────
+// ── Request types ──────────────────────────────────────────────────────────────
 
 export interface SectorConstraint {
   /** Sector name (e.g. "Technology", "Healthcare") */
@@ -143,7 +143,7 @@ export interface OptimizationRequest {
   run_quantum?: boolean;
 }
 
-// ── Portfolio result types ────────────────────────────────────────────────────
+// ── Portfolio result types ─────────────────────────────────────────────────────
 
 export interface AssetWeight {
   ticker: string;
@@ -203,7 +203,7 @@ export interface ComparisonSummary {
   recommendation: string;
 }
 
-// ── Efficient frontier ──────────────────────────────────────────────────────
+// ── Efficient frontier ─────────────────────────────────────────────────────────
 
 /**
  * Single sample on the efficient frontier.
@@ -259,7 +259,7 @@ export interface FrontierReport {
   commentary?: string | null;
 }
 
-// ── Run types ─────────────────────────────────────────────────────────────────
+// ── Run types ──────────────────────────────────────────────────────────────────
 
 export interface OptimizationRunSummary {
   run_id: string;
@@ -285,7 +285,7 @@ export interface OptimizationRunDetail extends OptimizationRunSummary {
   frontier_report?: FrontierReport | null;
 }
 
-// ── WebSocket message types ───────────────────────────────────────────────────
+// ── WebSocket message types ────────────────────────────────────────────────────
 
 export interface AgentProgressMessage {
   type: "progress";
@@ -314,7 +314,7 @@ export type WebSocketMessage =
   | AgentResultMessage
   | AgentErrorMessage;
 
-// ── Asset search ──────────────────────────────────────────────────────────────
+// ── Asset search ───────────────────────────────────────────────────────────────
 
 export interface AssetSearchResult {
   ticker: string;
@@ -333,4 +333,76 @@ export interface HealthStatus {
     redis: "up" | "down";
     celery: "up" | "down";
   };
+}
+
+// ── Chat assistant ─────────────────────────────────────────────────────────────
+
+export type ChatRole = "user" | "assistant";
+
+export type ChatSessionStatus =
+  | "active"
+  | "pending_confirmation"
+  | "confirmed"
+  | "abandoned";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+  /** Optional client-side timestamp (ISO-8601) used for dedup/render keys. */
+  timestamp?: string;
+}
+
+/**
+ * Partial OptimizationRequest extracted by the LLM across one or more turns.
+ * Every field is optional; the backend ExtractedSlots model relaxes all
+ * constraints to support incremental slot filling.
+ */
+export interface ExtractedSlots {
+  tickers?: string[] | null;
+  budget?: number | null;
+  min_return?: number | null;
+  max_volatility?: number | null;
+  max_weight_per_asset?: number | null;
+  min_weight_per_asset?: number | null;
+  sector_constraints?: SectorConstraint[] | null;
+  num_assets_to_select?: number | null;
+  lookback_days?: number | null;
+  run_quantum?: boolean | null;
+  objectives?: BusinessObjective[] | null;
+  frontier?: FrontierConfig | null;
+}
+
+export interface ChatSession {
+  session_id: string;
+  status: ChatSessionStatus;
+  messages: ChatMessage[];
+  extracted_slots: ExtractedSlots;
+  run_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateChatSessionRequest {
+  initial_message?: string | null;
+}
+
+export interface SendChatMessageRequest {
+  content: string;
+}
+
+export interface SendChatMessageResponse {
+  session_id: string;
+  status: ChatSessionStatus;
+  reply: string;
+  payload_preview: ExtractedSlots | null;
+}
+
+export interface ConfirmChatSessionRequest {
+  slot_overrides?: Record<string, unknown> | null;
+}
+
+export interface ConfirmChatSessionResponse {
+  session_id: string;
+  run_id: string;
+  status: "confirmed";
 }

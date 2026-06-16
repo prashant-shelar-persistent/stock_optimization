@@ -3,7 +3,7 @@
  *
  * Shows the ordered pipeline of agent nodes with their status:
  *   data_fetch → constraint_validation → classical_optimization →
- *   quantum_dispatch → comparison → llm_explanation
+ *   quantum_dispatch → comparison → frontier_computation → llm_explanation
  *
  * Each node shows:
  *   - Icon + label
@@ -29,6 +29,7 @@ import {
   Atom,
   GitCompare,
   MessageSquare,
+  TrendingUp,
 } from "lucide-react";
 import type { AgentProgressMessage, AgentNodeName } from "@/types/api";
 
@@ -66,6 +67,11 @@ const NODE_META: Record<AgentNodeName, NodeMeta> = {
     description: "Comparing classical vs quantum results",
     Icon: GitCompare,
   },
+  frontier_computation: {
+    label: "Frontier Computation",
+    description: "Computing efficient frontier sweep",
+    Icon: TrendingUp,
+  },
   llm_explanation: {
     label: "LLM Explanation",
     description: "Generating GPT-4o portfolio explanation",
@@ -80,6 +86,7 @@ const PIPELINE_ORDER: AgentNodeName[] = [
   "classical_optimization",
   "quantum_dispatch",
   "comparison",
+  "frontier_computation",
   "llm_explanation",
 ];
 

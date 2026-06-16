@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
 
     yield  # Application runs here
 
-    # ── Shutdown ────────────────────────────────────────────────────────────
+    # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("application_shutting_down")
     await close_redis()
     logger.info("application_stopped")
@@ -223,15 +223,34 @@ def _register_routers(app: FastAPI) -> None:
 
 
 def _error_code_to_http_status(error_code: str) -> int:
-    """Map domain error codes to HTTP status codes."""
+    """Map domain error codes to HTTP status codes.
+
+    Returns the appropriate HTTP status code for a given domain error code.
+    Unknown error codes fall back to 500 (Internal Server Error).
+    """
     mapping: dict[str, int] = {
+        # ── Data layer ────────────────────────────────────────────────────────
         "DATA_FETCH_ERROR": 502,
         "CACHE_ERROR": 503,
+        # ── Optimization layer ────────────────────────────────────────────────
         "CONSTRAINT_VIOLATION": 422,
         "SOLVER_INFEASIBLE": 422,
         "QUANTUM_TIMEOUT": 504,
         "QUANTUM_ASSET_LIMIT_EXCEEDED": 422,
+        # ── Agent layer ───────────────────────────────────────────────────────
         "AGENT_EXECUTION_ERROR": 500,
+        # ── Chat layer ────────────────────────────────────────────────────────
+        # 404 - session does not exist in the database
+        "CHAT_SESSION_NOT_FOUND": 404,
+        # 410 - session existed but its TTL has passed; client must create new session
+        "CHAT_SESSION_EXPIRED": 410,
+        # 409 - session has already been confirmed; cannot confirm again
+        "CHAT_SESSION_ALREADY_CONFIRMED": 409,
+        # 409 - operation attempted on a session in an incompatible lifecycle state
+        "CHAT_INVALID_STATE": 409,
+        # 502 - upstream LLM call failed or returned unparseable structured output
+        "CHAT_SLOT_EXTRACTION_ERROR": 502,
+        # ── Fallback ──────────────────────────────────────────────────────────
         "INTERNAL_ERROR": 500,
     }
     return mapping.get(error_code, 500)

@@ -2,11 +2,11 @@
  * Tests for @/components/dashboard/AgentProgressPanel
  *
  * Covers:
- *   - Idle state: all 6 pipeline steps rendered, 0% progress
+ *   - Idle state: all 7 pipeline steps rendered, 0% progress
  *   - Running state: messages displayed, progress percentage updated
  *   - Completed state: 100% progress, all nodes shown as completed
  *   - Failed state: failed node message displayed
- *   - Progress percentage calculation (1/6 = 17%, 2/6 = 33%, 6/6 = 100%)
+ *   - Progress percentage calculation (1/7 = 14%, 2/7 = 29%, 7/7 = 100%)
  *   - Timestamp formatting
  *   - Multiple nodes in progress simultaneously
  *   - Pending node descriptions shown
@@ -28,7 +28,7 @@ describe("AgentProgressPanel", () => {
   // ── Idle / empty state ──────────────────────────────────────────────────────
 
   describe("idle state (no progress events)", () => {
-    it("renders all 6 pipeline step labels", () => {
+    it("renders all 7 pipeline step labels", () => {
       render(<AgentProgressPanel progress={[]} isRunning={false} />);
 
       expect(screen.getByText("Data Fetch")).toBeInTheDocument();
@@ -36,6 +36,7 @@ describe("AgentProgressPanel", () => {
       expect(screen.getByText("Classical Optimization")).toBeInTheDocument();
       expect(screen.getByText("Quantum Optimization")).toBeInTheDocument();
       expect(screen.getByText("Comparison")).toBeInTheDocument();
+      expect(screen.getByText("Frontier Computation")).toBeInTheDocument();
       expect(screen.getByText("LLM Explanation")).toBeInTheDocument();
     });
 
@@ -50,10 +51,10 @@ describe("AgentProgressPanel", () => {
       expect(progressBar).toBeInTheDocument();
     });
 
-    it("renders all 6 pipeline steps as list items", () => {
+    it("renders all 7 pipeline steps as list items", () => {
       render(<AgentProgressPanel progress={[]} isRunning={false} />);
       const listItems = screen.getAllByRole("listitem");
-      expect(listItems).toHaveLength(6);
+      expect(listItems).toHaveLength(7);
     });
 
     it("shows the description for the Data Fetch node when pending", () => {
@@ -172,17 +173,17 @@ describe("AgentProgressPanel", () => {
   // ── Progress percentage ─────────────────────────────────────────────────────
 
   describe("progress percentage", () => {
-    it("shows 17% when 1 of 6 nodes completes", () => {
+    it("shows 14% when 1 of 7 nodes completes", () => {
       const progress = [
         makeProgressMessage("data_fetch", "started"),
         makeProgressMessage("data_fetch", "completed"),
       ];
       render(<AgentProgressPanel progress={progress} isRunning={true} />);
-      // 1/6 = 16.67% → rounded to 17%
-      expect(screen.getByText("17%")).toBeInTheDocument();
+      // 1/7 = 14.28% → rounded to 14%
+      expect(screen.getByText("14%")).toBeInTheDocument();
     });
 
-    it("shows 33% when 2 of 6 nodes complete", () => {
+    it("shows 29% when 2 of 7 nodes complete", () => {
       const progress = [
         makeProgressMessage("data_fetch", "started"),
         makeProgressMessage("data_fetch", "completed"),
@@ -190,11 +191,11 @@ describe("AgentProgressPanel", () => {
         makeProgressMessage("constraint_validation", "completed"),
       ];
       render(<AgentProgressPanel progress={progress} isRunning={true} />);
-      // 2/6 = 33.33% → rounded to 33%
-      expect(screen.getByText("33%")).toBeInTheDocument();
+      // 2/7 = 28.57% → rounded to 29%
+      expect(screen.getByText("29%")).toBeInTheDocument();
     });
 
-    it("shows 50% when 3 of 6 nodes complete", () => {
+    it("shows 43% when 3 of 7 nodes complete", () => {
       const progress: AgentProgressMessage[] = [
         makeProgressMessage("data_fetch", "started"),
         makeProgressMessage("data_fetch", "completed"),
@@ -204,11 +205,11 @@ describe("AgentProgressPanel", () => {
         makeProgressMessage("classical_optimization", "completed"),
       ];
       render(<AgentProgressPanel progress={progress} isRunning={true} />);
-      // 3/6 = 50%
-      expect(screen.getByText("50%")).toBeInTheDocument();
+      // 3/7 = 42.86% → rounded to 43%
+      expect(screen.getByText("43%")).toBeInTheDocument();
     });
 
-    it("shows 100% when all 6 nodes complete", () => {
+    it("shows 100% when all 7 nodes complete", () => {
       render(
         <AgentProgressPanel
           progress={FULL_PIPELINE_PROGRESS}
@@ -222,7 +223,7 @@ describe("AgentProgressPanel", () => {
       // Only 'started' for data_fetch — no 'completed' yet
       const progress = [makeProgressMessage("data_fetch", "started")];
       render(<AgentProgressPanel progress={progress} isRunning={true} />);
-      // 0 completed out of 6 = 0%
+      // 0 completed out of 7 = 0%
       expect(screen.getByText("0%")).toBeInTheDocument();
     });
 

@@ -47,6 +47,7 @@ export const FULL_PIPELINE_PROGRESS: AgentProgressMessage[] = [
   "classical_optimization",
   "quantum_dispatch",
   "comparison",
+  "frontier_computation",
   "llm_explanation",
 ].flatMap((node) => [
   makeProgressMessage(node as AgentNodeName, "started", {

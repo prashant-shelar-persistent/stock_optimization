@@ -193,3 +193,210 @@ class AgentExecutionError(PortfolioOptimizerError):
             details={**(details or {}), "node_name": node_name},
         )
         self.node_name = node_name
+
+
+# ── Chat layer ────────────────────────────────────────────────────────────────
+
+
+class ChatSessionNotFoundError(PortfolioOptimizerError):
+    """Raised when a requested chat session does not exist in the database.
+
+    This is the canonical 404-equivalent for the chat domain.  The
+    FastAPI exception handler maps it to HTTP 404 with a structured
+    JSON body.
+
+    Attributes:
+        session_id: The UUID string of the session that was not found.
+
+    Example::
+
+        raise ChatSessionNotFoundError(session_id="abc-123")
+        # → HTTP 404  {"error_code": "CHAT_SESSION_NOT_FOUND",
+        #              "message": "Chat session 'abc-123' not found.",
+        #              "details": {"session_id": "abc-123"}}
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=f"Chat session '{session_id}' not found.",
+            error_code="CHAT_SESSION_NOT_FOUND",
+            details={**(details or {}), "session_id": session_id},
+        )
+        self.session_id = session_id
+
+
+class ChatSessionExpiredError(PortfolioOptimizerError):
+    """Raised when a message is sent to a chat session that has already expired.
+
+    Sessions expire after a configurable TTL (default 24 hours).  Once
+    expired, the session is read-only; clients must create a new session.
+
+    Attributes:
+        session_id: The UUID string of the expired session.
+
+    Example::
+
+        raise ChatSessionExpiredError(session_id="abc-123")
+        # → HTTP 410  {"error_code": "CHAT_SESSION_EXPIRED",
+        #              "message": "Chat session 'abc-123' has expired ...",
+        #              "details": {"session_id": "abc-123"}}
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=(
+                f"Chat session '{session_id}' has expired and is no longer "
+                "accepting new messages. Please start a new session."
+            ),
+            error_code="CHAT_SESSION_EXPIRED",
+            details={**(details or {}), "session_id": session_id},
+        )
+        self.session_id = session_id
+
+
+class ChatSessionAlreadyConfirmedError(PortfolioOptimizerError):
+    """Raised when a confirmation is attempted on an already-confirmed session.
+
+    Once a session has been confirmed and an optimization run has been
+    dispatched, the session transitions to ``confirmed`` status and
+    cannot be confirmed again.
+
+    Attributes:
+        session_id: The UUID string of the already-confirmed session.
+        run_id:     The optimization run UUID that was previously dispatched.
+
+    Example::
+
+        raise ChatSessionAlreadyConfirmedError(
+            session_id="abc-123", run_id="xyz-456"
+        )
+        # → HTTP 409  {"error_code": "CHAT_SESSION_ALREADY_CONFIRMED",
+        #              "message": "Chat session 'abc-123' has already been ...",
+        #              "details": {"session_id": "abc-123", "run_id": "xyz-456"}}
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        run_id: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        run_info = f" (run_id={run_id!r})" if run_id else ""
+        super().__init__(
+            message=(
+                f"Chat session '{session_id}' has already been confirmed"
+                f"{run_info}. "
+                "Each session can only be confirmed once."
+            ),
+            error_code="CHAT_SESSION_ALREADY_CONFIRMED",
+            details={
+                **(details or {}),
+                "session_id": session_id,
+                "run_id": run_id,
+            },
+        )
+        self.session_id = session_id
+        self.run_id = run_id
+
+
+class ChatSlotExtractionError(PortfolioOptimizerError):
+    """Raised when the LLM slot-filler returns an unparseable or invalid response.
+
+    This covers two failure modes:
+
+    1. **Parse failure** — the LLM response is not valid JSON or does not
+       conform to the expected schema.
+    2. **Validation failure** — the extracted JSON is structurally valid but
+       fails Pydantic validation (e.g. negative budget, empty tickers list).
+
+    The ``raw_response`` field preserves the raw LLM output for debugging.
+
+    Attributes:
+        raw_response: The raw string returned by the LLM (may be None if the
+                      API call itself failed before returning a response).
+
+    Example::
+
+        raise ChatSlotExtractionError(
+            message="LLM returned invalid JSON for slot extraction",
+            raw_response='{"tickers": null}',
+        )
+        # → HTTP 502  {"error_code": "CHAT_SLOT_EXTRACTION_ERROR",
+        #              "message": "LLM returned invalid JSON ...",
+        #              "details": {"raw_response": '{"tickers": null}'}}
+    """
+
+    def __init__(
+        self,
+        message: str,
+        raw_response: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="CHAT_SLOT_EXTRACTION_ERROR",
+            details={**(details or {}), "raw_response": raw_response},
+        )
+        self.raw_response = raw_response
+
+
+class ChatInvalidStateError(PortfolioOptimizerError):
+    """Raised when an operation is attempted on a session in an incompatible state.
+
+    For example, sending a message to a ``confirmed`` session, or calling
+    confirm on a session that is still in ``collecting`` state (i.e. the
+    LLM has not yet produced a complete payload preview).
+
+    Attributes:
+        session_id:     The UUID string of the session.
+        current_status: The session's current status string.
+        required_status: The status that was required for the operation.
+
+    Example::
+
+        raise ChatInvalidStateError(
+            session_id="abc-123",
+            current_status="confirmed",
+            required_status="pending_confirmation",
+        )
+        # → HTTP 409  {"error_code": "CHAT_INVALID_STATE",
+        #              "message": "Operation requires session status ...",
+        #              "details": {...}}
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        current_status: str,
+        required_status: str | list[str],
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        if isinstance(required_status, list):
+            required_str = " or ".join(f"'{s}'" for s in required_status)
+        else:
+            required_str = f"'{required_status}'"
+
+        super().__init__(
+            message=(
+                f"Operation requires session status {required_str}, "
+                f"but session '{session_id}' is currently '{current_status}'."
+            ),
+            error_code="CHAT_INVALID_STATE",
+            details={
+                **(details or {}),
+                "session_id": session_id,
+                "current_status": current_status,
+                "required_status": required_status,
+            },
+        )
+        self.session_id = session_id
+        self.current_status = current_status
+        self.required_status = required_status
