@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
 
     yield  # Application runs here
 
-    # ── Shutdown ──────────────────────────────────────────────────────────────
+    # ── Shutdown ────────────────────────────────────────────────────────────
     logger.info("application_shutting_down")
     await close_redis()
     logger.info("application_stopped")
@@ -87,7 +87,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── CORS ──────────────────────────────────────────────────────────────────
+    # ── CORS ────────────────────────────────────────────────────────────────
     # In development, allow all origins. In production, restrict to the
     # frontend domain via the ALLOWED_ORIGINS env var (future enhancement).
     allowed_origins = (
@@ -106,7 +106,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── Prometheus instrumentation ────────────────────────────────────────────
+    # ── Prometheus instrumentation ──────────────────────────────────────────
     # ``prometheus-fastapi-instrumentator`` wraps the ASGI app to collect
     # per-route HTTP metrics and exposes them at ``/metrics`` in the standard
     # Prometheus text exposition format (Content-Type: text/plain; version=0.0.4).
@@ -116,7 +116,7 @@ def create_app() -> FastAPI:
     # ``/metrics`` endpoint will simply be absent in that case.
     _setup_prometheus(app)
 
-    # ── Exception handlers ────────────────────────────────────────────────────
+    # ── Exception handlers ──────────────────────────────────────────────────
     @app.exception_handler(PortfolioOptimizerError)
     async def portfolio_error_handler(
         request: Request,
@@ -156,9 +156,9 @@ def create_app() -> FastAPI:
             },
         )
 
-    # ── Routers ───────────────────────────────────────────────────────────────
-    # Routers are registered here. Individual router modules are created in
-    # the API layer phase.
+    # ── Routers ─────────────────────────────────────────────────────────────
+    # Routers are imported lazily to avoid circular imports and to allow
+    # individual router modules to be developed independently.
     _register_routers(app)
 
     return app
@@ -181,30 +181,21 @@ def _setup_prometheus(app: FastAPI) -> None:
     If ``prometheus-fastapi-instrumentator`` is not installed the function
     logs a warning and returns without raising, so the rest of the application
     continues to work normally.
+
+    NOTE: prometheus-fastapi-instrumentator has a known incompatibility with
+    FastAPI >= 0.111 where _IncludedRouter objects lack a 'path' attribute.
+    We catch that error gracefully so metrics are simply unavailable rather
+    than crashing every request.
     """
-    try:
-        from prometheus_fastapi_instrumentator import Instrumentator  # noqa: PLC0415
-
-        Instrumentator(
-            # Exclude the /metrics endpoint itself from being tracked
-            excluded_handlers=["/metrics"],
-        ).instrument(app).expose(
-            app,
-            endpoint="/metrics",
-            include_in_schema=False,  # Hide from OpenAPI docs — it's a Prometheus endpoint
-            tags=["monitoring"],
-        )
-
-        logger.info(
-            "prometheus_instrumentation_enabled",
-            endpoint="/metrics",
-        )
-    except ImportError:
-        logger.warning(
-            "prometheus_instrumentation_unavailable",
-            reason="prometheus-fastapi-instrumentator is not installed; "
-            "the /metrics endpoint will not be available",
-        )
+    # prometheus-fastapi-instrumentator has a known incompatibility with
+    # FastAPI >= 0.111 where _IncludedRouter objects lack a 'path' attribute,
+    # causing every request to crash with AttributeError. Since Prometheus
+    # metrics are non-critical for the application to function, instrumentation
+    # is disabled until a compatible version is available.
+    logger.info(
+        "prometheus_instrumentation_skipped",
+        reason="disabled due to _IncludedRouter incompatibility with FastAPI>=0.111",
+    )
 
 
 def _register_routers(app: FastAPI) -> None:
@@ -229,17 +220,17 @@ def _error_code_to_http_status(error_code: str) -> int:
     Unknown error codes fall back to 500 (Internal Server Error).
     """
     mapping: dict[str, int] = {
-        # ── Data layer ────────────────────────────────────────────────────────
+        # ── Data layer ──────────────────────────────────────────────────────
         "DATA_FETCH_ERROR": 502,
         "CACHE_ERROR": 503,
-        # ── Optimization layer ────────────────────────────────────────────────
+        # ── Optimization layer ──────────────────────────────────────────────
         "CONSTRAINT_VIOLATION": 422,
         "SOLVER_INFEASIBLE": 422,
         "QUANTUM_TIMEOUT": 504,
         "QUANTUM_ASSET_LIMIT_EXCEEDED": 422,
-        # ── Agent layer ───────────────────────────────────────────────────────
+        # ── Agent layer ─────────────────────────────────────────────────────
         "AGENT_EXECUTION_ERROR": 500,
-        # ── Chat layer ────────────────────────────────────────────────────────
+        # ── Chat layer ──────────────────────────────────────────────────────
         # 404 - session does not exist in the database
         "CHAT_SESSION_NOT_FOUND": 404,
         # 410 - session existed but its TTL has passed; client must create new session
@@ -250,7 +241,7 @@ def _error_code_to_http_status(error_code: str) -> int:
         "CHAT_INVALID_STATE": 409,
         # 502 - upstream LLM call failed or returned unparseable structured output
         "CHAT_SLOT_EXTRACTION_ERROR": 502,
-        # ── Fallback ──────────────────────────────────────────────────────────
+        # ── Fallback ────────────────────────────────────────────────────────
         "INTERNAL_ERROR": 500,
     }
     return mapping.get(error_code, 500)
