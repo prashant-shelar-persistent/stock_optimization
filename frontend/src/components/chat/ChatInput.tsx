@@ -42,6 +42,11 @@ export interface ChatInputProps {
   placeholder?: string;
   /** Optional extra className for the outer container. */
   className?: string;
+  /**
+   * Called whenever the textarea value changes (on every keystroke).
+   * Used by ChatAssistant to clear the error banner when the user starts typing.
+   */
+  onChange?: (value: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -52,6 +57,7 @@ export function ChatInput({
   disabled = false,
   placeholder = "Ask me to build a portfolio…",
   className,
+  onChange,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -115,7 +121,10 @@ export function ChatInput({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            onChange?.(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           placeholder={disabled ? "Session complete." : placeholder}
           disabled={disabled || isSending}
@@ -141,6 +150,7 @@ export function ChatInput({
           disabled={!canSend}
           aria-label="Send message"
           aria-busy={isSending}
+          aria-disabled={!canSend}
           className={cn(
             "h-8 w-8 shrink-0 transition-all",
             canSend ? "opacity-100" : "opacity-40",

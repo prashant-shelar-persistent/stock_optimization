@@ -340,15 +340,23 @@ export interface HealthStatus {
 export type ChatRole = "user" | "assistant";
 
 export type ChatSessionStatus =
-  | "active"
+  | "collecting"
   | "pending_confirmation"
   | "confirmed"
+  | "expired"
   | "abandoned";
 
 export interface ChatMessage {
   role: ChatRole;
   content: string;
-  /** Optional client-side timestamp (ISO-8601) used for dedup/render keys. */
+  /**
+   * Stable client-side identifier for deduplication and React keys.
+   * Generated via `crypto.randomUUID()` when the server does not supply one.
+   * Optional from the server perspective; always present after client-side
+   * normalisation in the store.
+   */
+  id?: string;
+  /** Optional client-side timestamp (ISO-8601) used for render keys. */
   timestamp?: string;
 }
 
@@ -391,9 +399,11 @@ export interface SendChatMessageRequest {
 }
 
 export interface SendChatMessageResponse {
-  session_id: string;
-  status: ChatSessionStatus;
+  /** Full updated session state (mirrors ChatSession). */
+  session: ChatSession;
+  /** The assistant's reply text (convenience field). */
   reply: string;
+  /** Full extracted payload when status == 'pending_confirmation'. Null otherwise. */
   payload_preview: ExtractedSlots | null;
 }
 

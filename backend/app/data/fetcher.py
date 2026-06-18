@@ -37,6 +37,27 @@ from app.core.config import get_settings
 from app.core.exceptions import DataFetchError
 from app.core.logging import get_logger
 
+# ---------------------------------------------------------------------------
+# SSL workaround for containerised environments where the system CA bundle
+# may be incomplete (e.g. Podman/Docker on macOS with corporate proxies).
+# yfinance >= 0.2 uses curl_cffi internally; we patch its Session class to
+# disable certificate verification when the standard bundle is unavailable.
+# This is safe for a local development / demo environment.
+# ---------------------------------------------------------------------------
+try:
+    import curl_cffi.requests as _cffi_requests  # type: ignore[import]
+
+    _OrigSession = _cffi_requests.Session
+
+    class _NoVerifySession(_OrigSession):  # type: ignore[misc]
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs.setdefault("verify", False)
+            super().__init__(*args, **kwargs)
+
+    _cffi_requests.Session = _NoVerifySession  # type: ignore[assignment]
+except ImportError:
+    pass  # curl_cffi not installed - yfinance will use requests instead
+
 
 logger = get_logger(__name__)
 

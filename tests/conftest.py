@@ -82,3 +82,17 @@ def sector_tags_4() -> dict[str, str]:
         "GOOGL": "Communication Services",
         "AMZN": "Consumer Discretionary",
     }
+
+
+# ── Chat rate-limit bucket reset ──────────────────────────────────────────────
+# The in-process rate limiter in app.api.v1.chat uses a module-level dict.
+# Clear it before each test so rate-limit state does not leak between tests.
+
+@pytest.fixture(autouse=True)
+def reset_chat_rate_limit_buckets() -> None:
+    """Clear the in-process rate-limit bucket before each test."""
+    try:
+        from app.api.v1.chat import _rate_limit_buckets  # noqa: PLC0415
+        _rate_limit_buckets.clear()
+    except ImportError:
+        pass

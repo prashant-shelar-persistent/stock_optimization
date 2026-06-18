@@ -96,6 +96,15 @@ MAX_TOKENS: int = 1_024
 #: the model deterministic and reduces hallucination of ticker symbols.
 TEMPERATURE: float = 0.1
 
+#: Maximum number of tickers allowed per request.  Lists longer than this
+#: are truncated with a warning to prevent oversized OptimizationRequests.
+MAX_TICKERS_PER_REQUEST: int = 50
+
+#: Budget bounds for the fallback parser.  Values outside [MIN_BUDGET, MAX_BUDGET]
+#: are discarded so the LLM/clarify path asks the user to restate.
+MIN_BUDGET: float = 1.0
+MAX_BUDGET: float = 1e12
+
 
 # ── LLMSlotFiller ─────────────────────────────────────────────────────────────
 
@@ -321,8 +330,11 @@ class LLMSlotFiller:
                 error_type=error_type,
                 error=str(exc),
             )
+            # Do NOT include the raw exception string in the user-facing message
+            # to avoid leaking internal API details (keys, endpoints, etc.).
             raise ChatSlotExtractionError(
-                f"OpenAI API call failed: {error_type}: {exc}",
+                f"The AI assistant is temporarily unavailable ({error_type}). "
+                "Please try again in a moment.",
                 raw_response=None,
             ) from exc
 
@@ -349,19 +361,51 @@ class LLMSlotFiller:
     def _parse_response(self, raw_content: str) -> LLMSlotFillerOutput:
         """Parse and validate the raw JSON response from GPT-4o.
 
+        Defensively handles two common model misbehaviours before attempting
+        JSON parsing:
+
+        1. **Markdown code fences** — GPT-4o occasionally wraps its JSON
+           output in a ````json ... ```` block even when instructed not to.
+           The fence is stripped before parsing so the caller never sees a
+           ``JSONDecodeError`` caused by leading backticks.
+
+        2. **Non-dict JSON** — If the model returns a JSON array or scalar
+           instead of an object, a
+           :class:`~app.core.exceptions.ChatSlotExtractionError` is raised
+           immediately with a clear message rather than letting Pydantic
+           produce a confusing ``model_validate`` error.
+
         Args:
-            raw_content: The raw JSON string from the model's response.
+            raw_content: The raw string from the model's response content field.
 
         Returns:
             A validated :class:`~app.chat.schemas.LLMSlotFillerOutput`.
 
         Raises:
-            ChatSlotExtractionError: When the JSON cannot be parsed or
+            ChatSlotExtractionError: When the JSON cannot be parsed, when the
+                top-level value is not a JSON object, or when the parsed object
                 does not match the expected schema.
         """
+        # ── Strip markdown code fences ────────────────────────────────────────
+        # GPT-4o sometimes wraps JSON in ```json ... ``` even with structured
+        # outputs enabled.  Strip the fences defensively so json.loads never
+        # sees leading/trailing backtick lines.
+        stripped = raw_content.strip()
+        _fence_re = re.compile(
+            r"^```(?:json)?\s*\n(.*?)\n```\s*$",
+            re.DOTALL | re.IGNORECASE,
+        )
+        fence_match = _fence_re.match(stripped)
+        if fence_match:
+            logger.debug(
+                "chat_slot_filler_stripped_markdown_fence",
+                original_length=len(raw_content),
+            )
+            stripped = fence_match.group(1).strip()
+
         # ── JSON parsing ──────────────────────────────────────────────────────
         try:
-            parsed: dict[str, Any] = json.loads(raw_content)
+            parsed: dict[str, Any] = json.loads(stripped)
         except json.JSONDecodeError as exc:
             logger.error(
                 "chat_slot_filler_json_parse_error",
@@ -372,6 +416,21 @@ class LLMSlotFiller:
                 f"GPT-4o returned invalid JSON: {exc}",
                 raw_response=raw_content,
             ) from exc
+
+        # ── Guard: top-level value must be a JSON object ──────────────────────
+        # The structured-output schema requires an object; a JSON array or
+        # scalar would cause a confusing Pydantic error, so we catch it here.
+        if not isinstance(parsed, dict):
+            logger.error(
+                "chat_slot_filler_non_dict_response",
+                actual_type=type(parsed).__name__,
+                raw_content_preview=raw_content[:200],
+            )
+            raise ChatSlotExtractionError(
+                f"GPT-4o returned a non-object JSON value ({type(parsed).__name__}); "
+                "expected a JSON object matching the slot-filling schema.",
+                raw_response=raw_content,
+            )
 
         # ── Pydantic validation ───────────────────────────────────────────────
         try:
@@ -493,6 +552,14 @@ class LLMSlotFiller:
                     found_tickers.append(sym)
                     seen.add(sym)
             if len(found_tickers) >= 2:
+                if len(found_tickers) > MAX_TICKERS_PER_REQUEST:
+                    logger.warning(
+                        "chat_slot_filler_tickers_truncated",
+                        original_count=len(found_tickers),
+                        max_allowed=MAX_TICKERS_PER_REQUEST,
+                        message="Ticker list truncated to MAX_TICKERS_PER_REQUEST",
+                    )
+                    found_tickers = found_tickers[:MAX_TICKERS_PER_REQUEST]
                 merged["tickers"] = found_tickers
 
         # ── Budget ────────────────────────────────────────────────────────────
@@ -572,8 +639,16 @@ class LLMSlotFiller:
                                 budget_val = float((p1 + p2) * multiplier_val)
                                 break
 
-            if budget_val is not None and budget_val > 0:
+            if budget_val is not None and MIN_BUDGET <= budget_val <= MAX_BUDGET:
                 merged["budget"] = budget_val
+            elif budget_val is not None:
+                logger.warning(
+                    "chat_slot_filler_budget_out_of_range",
+                    budget_val=budget_val,
+                    min_budget=MIN_BUDGET,
+                    max_budget=MAX_BUDGET,
+                    message="Budget value out of valid range; discarding to trigger clarify path",
+                )
 
         # ── min_return ────────────────────────────────────────────────────────
         # Match: "at least 12% annual return" | "minimum 10% return" | "12% return"

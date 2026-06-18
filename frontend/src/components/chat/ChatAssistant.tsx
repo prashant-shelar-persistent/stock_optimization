@@ -67,6 +67,7 @@ export function ChatAssistant() {
 
   const togglePanel = useChatStore((s) => s.togglePanel);
   const closePanel = useChatStore((s) => s.closePanel);
+  const clearError = useChatStore((s) => s.clearError);
 
   const { sendMessage, confirmRun, resetSession } = useChatSession();
 
@@ -111,6 +112,11 @@ export function ChatAssistant() {
     resetSession();
   }, [resetSession]);
 
+  // Clear the error banner as soon as the user starts typing a new message
+  const handleInputChange = useCallback(() => {
+    if (error) clearError();
+  }, [error, clearError]);
+
   // ── Derived state ────────────────────────────────────────────────────────────
 
   const isSessionConfirmed = sessionStatus === "confirmed";
@@ -153,7 +159,7 @@ export function ChatAssistant() {
                 Portfolio Assistant
               </p>
               <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {sessionStatus === "active" && "Listening…"}
+                {sessionStatus === "collecting" && "Listening…"}
                 {sessionStatus === "pending_confirmation" && "Ready to confirm"}
                 {sessionStatus === "confirmed" && "Run dispatched ✓"}
                 {sessionStatus === null && "Ask me anything"}
@@ -190,7 +196,12 @@ export function ChatAssistant() {
 
         {/* ── Message thread ── */}
         <ScrollArea className="flex-1 px-4">
-          <div className="flex flex-col gap-3 py-4">
+          <div
+            className="flex flex-col gap-3 py-4"
+            aria-live="polite"
+            aria-atomic="false"
+            aria-relevant="additions"
+          >
             {/* Welcome message (shown before any messages) */}
             {messages.length === 0 && (
               <ChatMessage
@@ -247,6 +258,7 @@ export function ChatAssistant() {
             onSend={handleSend}
             isSending={isSending}
             disabled={inputDisabled}
+            onChange={handleInputChange}
             placeholder={
               showConfirmCard
                 ? "Confirm or edit the parameters above…"

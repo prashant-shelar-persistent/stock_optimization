@@ -157,9 +157,9 @@ describe("setSessionId", () => {
     expect(getState().extractedSlots).toEqual({});
   });
 
-  it("sets sessionStatus to 'active'", () => {
+  it("sets sessionStatus to 'collecting'", () => {
     getState().setSessionId("session-new");
-    expect(getState().sessionStatus).toBe("active");
+    expect(getState().sessionStatus).toBe("collecting");
   });
 
   it("clears pendingPayload", () => {

@@ -1248,3 +1248,140 @@ async def test_confirm_session_no_quantum_routes_to_default_queue() -> None:
     call_kwargs = mock_task.apply_async.call_args
     queue = call_kwargs.kwargs.get("queue") or call_kwargs[1].get("queue")
     assert queue == "default"
+
+
+# ---------------------------------------------------------------------------
+# Round 4 — new tests: dispatch failure, idempotent confirm, rate limiting
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dispatch_failure_reverts_session_status() -> None:
+    """POST /sessions/{id}/confirm — dispatch failure reverts session to pending_confirmation."""
+    session_id = VALID_SESSION_ID
+    chat_session = _make_chat_session(
+        session_id=session_id,
+        status="pending_confirmation",
+        extracted_slots={
+            "tickers": ["AAPL", "MSFT"],
+            "budget": 50000.0,
+        },
+    )
+
+    mock_db = _make_mock_db_session()
+    mock_db.execute = AsyncMock(return_value=_make_db_execute_result(chat_session))
+
+    async def override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        with patch("app.workers.tasks.run_optimization_task") as mock_task:
+            # Make the Celery dispatch raise an exception
+            mock_task.apply_async = MagicMock(side_effect=RuntimeError("Celery broker unavailable"))
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/chat/sessions/{session_id}/confirm",
+                    json={},
+                )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    # Should return an error (409 from ChatInvalidStateError)
+    assert response.status_code in (409, 500, 502)
+    # Session status should have been reverted to pending_confirmation
+    assert chat_session.status == "pending_confirmation"
+
+
+@pytest.mark.asyncio
+async def test_confirm_is_idempotent() -> None:
+    """POST /sessions/{id}/confirm — already confirmed session returns 409 (idempotent guard)."""
+    session_id = VALID_SESSION_ID
+    existing_run_id = "run-already-confirmed-123"
+    chat_session = _make_chat_session(
+        session_id=session_id,
+        status="confirmed",
+        run_id=existing_run_id,
+        extracted_slots={
+            "tickers": ["AAPL", "MSFT"],
+            "budget": 50000.0,
+        },
+    )
+
+    mock_db = _make_mock_db_session()
+    mock_db.execute = AsyncMock(return_value=_make_db_execute_result(chat_session))
+
+    async def override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        with patch("app.workers.tasks.run_optimization_task") as mock_task:
+            mock_task.apply_async = MagicMock()
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                # First confirm attempt (session already confirmed)
+                response1 = await client.post(
+                    f"/api/v1/chat/sessions/{session_id}/confirm",
+                    json={},
+                )
+                # Second confirm attempt
+                response2 = await client.post(
+                    f"/api/v1/chat/sessions/{session_id}/confirm",
+                    json={},
+                )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    # Both should return 409 (already confirmed)
+    assert response1.status_code == 409
+    assert response2.status_code == 409
+    # No new Celery dispatch should have occurred
+    mock_task.apply_async.assert_not_called()
+    # Both responses should include the existing run_id
+    body1 = response1.json()
+    assert body1.get("error_code") == "CHAT_SESSION_ALREADY_CONFIRMED"
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_returns_429_after_burst() -> None:
+    """POST /sessions/{id}/messages — 6th rapid message from same IP returns 429."""
+    session_id = VALID_SESSION_ID
+    chat_session = _make_chat_session(
+        session_id=session_id,
+        status="collecting",
+    )
+
+    mock_db = _make_mock_db_session()
+    mock_db.execute = AsyncMock(return_value=_make_db_execute_result(chat_session))
+    mock_filler = _make_mock_slot_filler(clarifying_question="What is your budget?")
+
+    async def override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        with patch("app.chat.service.get_slot_filler", return_value=mock_filler):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                responses = []
+                for _ in range(6):
+                    r = await client.post(
+                        f"/api/v1/chat/sessions/{session_id}/messages",
+                        json={"content": "Hello"},
+                    )
+                    responses.append(r)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    # First 5 should succeed (200)
+    for i, r in enumerate(responses[:5]):
+        assert r.status_code == 200, f"Request {i+1} should have succeeded, got {r.status_code}"
+
+    # 6th should be rate-limited (429)
+    assert responses[5].status_code == 429
+    body = responses[5].json()
+    assert body.get("error_code") == "CHAT_RATE_LIMITED"
+    # Should include Retry-After header
+    assert "Retry-After" in responses[5].headers

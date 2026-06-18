@@ -208,7 +208,7 @@ async def test_extract_slots_openai_error_raises_chat_slot_extraction_error() ->
             existing_slots={},
         )
 
-    assert "OpenAI API call failed" in str(exc_info.value)
+    assert "temporarily unavailable" in str(exc_info.value)
     assert exc_info.value.error_code == "CHAT_SLOT_EXTRACTION_ERROR"
 
 
@@ -612,3 +612,78 @@ def test_llm_slot_filler_accepts_custom_model() -> None:
     """LLMSlotFiller accepts a custom model string."""
     filler = LLMSlotFiller(client=MagicMock(), model="gpt-4o-mini")
     assert filler._model == "gpt-4o-mini"
+
+
+# ---------------------------------------------------------------------------
+# Round 4 — new tests: budget clamping, ticker filtering, safe error messages
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_budget_above_one_trillion_is_rejected() -> None:
+    """Fallback parser rejects budgets above 1 trillion and returns clarify status."""
+    filler = LLMSlotFiller(client=None)
+
+    with patch("app.chat.llm.get_settings") as mock_settings:
+        mock_settings.return_value.OPENAI_API_KEY = ""
+        result = await filler.extract_slots(
+            messages=_user_messages("invest AAPL MSFT with budget $9999999999999"),
+            existing_slots={},
+        )
+
+    # Budget is out of range — should be discarded, triggering clarify path
+    assert result.clarifying_question is not None
+    assert result.slots is None or result.slots.budget is None
+
+
+@pytest.mark.asyncio
+async def test_ticker_fallback_rejects_non_ticker_words() -> None:
+    """Fallback parser excludes common words (USD, ETF) from ticker extraction."""
+    filler = LLMSlotFiller(client=None)
+
+    with patch("app.chat.llm.get_settings") as mock_settings:
+        mock_settings.return_value.OPENAI_API_KEY = ""
+        result = await filler.extract_slots(
+            messages=_user_messages("invest USD ETF AAPL MSFT with budget $50000"),
+            existing_slots={},
+        )
+
+    # USD and ETF should be excluded; only AAPL and MSFT should be extracted
+    assert result.slots is not None
+    assert result.slots.tickers is not None
+    assert "USD" not in result.slots.tickers
+    assert "ETF" not in result.slots.tickers
+    assert "AAPL" in result.slots.tickers
+    assert "MSFT" in result.slots.tickers
+
+
+@pytest.mark.asyncio
+async def test_openai_error_returns_safe_message() -> None:
+    """When OpenAI raises an error, the exception message does NOT contain raw error details."""
+    # Simulate an OpenAI-like timeout error
+    class FakeAPITimeoutError(Exception):
+        """Simulated openai.APITimeoutError."""
+
+    mock_completions = MagicMock()
+    mock_completions.create = AsyncMock(
+        side_effect=FakeAPITimeoutError("Connection timed out to api.openai.com:443")
+    )
+    mock_chat = MagicMock()
+    mock_chat.completions = mock_completions
+    mock_client = MagicMock()
+    mock_client.chat = mock_chat
+
+    filler = LLMSlotFiller(client=mock_client)
+
+    with pytest.raises(ChatSlotExtractionError) as exc_info:
+        await filler.extract_slots(
+            messages=_user_messages("Optimize AAPL, MSFT with $50k"),
+            existing_slots={},
+        )
+
+    error_message = str(exc_info.value)
+    # The raw exception string must NOT appear in the user-facing message
+    assert "Connection timed out" not in error_message
+    assert "api.openai.com" not in error_message
+    # The message should be user-friendly
+    assert "temporarily unavailable" in error_message

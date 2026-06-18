@@ -49,9 +49,12 @@ Design decisions
 
 from __future__ import annotations
 
+import time
+from collections import defaultdict
 from typing import Annotated
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Request
+from fastapi.responses import JSONResponse
 
 from app.chat.schemas import (
     ChatSessionResponse,
@@ -69,6 +72,41 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# ── In-process rate limiter ────────────────────────────────────────────────────
+# Simple token-bucket: 5 messages per 10 seconds per client IP.
+# NOTE: This is an in-process guard only — production deployments should use
+# Redis-backed rate limiting (e.g. slowapi) for multi-process safety.
+_RATE_LIMIT_MESSAGES: int = 5
+_RATE_LIMIT_WINDOW_SECONDS: float = 10.0
+
+# Maps client IP → list of request timestamps within the current window
+_rate_limit_buckets: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(client_ip: str) -> tuple[bool, float]:
+    """Check whether the client has exceeded the rate limit.
+
+    Returns:
+        (allowed, retry_after_seconds) — if allowed is False, retry_after
+        is the number of seconds until the oldest request expires.
+    """
+    now = time.monotonic()
+    window_start = now - _RATE_LIMIT_WINDOW_SECONDS
+    bucket = _rate_limit_buckets[client_ip]
+
+    # Evict timestamps outside the current window
+    _rate_limit_buckets[client_ip] = [t for t in bucket if t > window_start]
+    bucket = _rate_limit_buckets[client_ip]
+
+    if len(bucket) >= _RATE_LIMIT_MESSAGES:
+        # Oldest request in the window determines when the client can retry
+        retry_after = _RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])
+        return False, max(retry_after, 0.0)
+
+    # Record this request
+    _rate_limit_buckets[client_ip].append(now)
+    return True, 0.0
 
 # ── Path parameter type alias ─────────────────────────────────────────────────
 # Validates that the session_id path segment is a well-formed UUID v4 string.
@@ -331,6 +369,26 @@ async def get_session(
             },
         },
         410: {"description": "Session has expired"},
+        422: {
+            "description": "Session has reached the maximum message count",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error_code": "CHAT_TOO_MANY_MESSAGES",
+                        "message": (
+                            "Chat session 'abc-123' has reached the maximum "
+                            "allowed message count (50). "
+                            "Please start a new session to continue."
+                        ),
+                        "details": {
+                            "session_id": "abc-123",
+                            "message_count": 50,
+                            "max_messages": 50,
+                        },
+                    }
+                }
+            },
+        },
         502: {"description": "LLM slot extraction failed (upstream error)"},
     },
 )
@@ -338,6 +396,7 @@ async def send_message(
     session_id: _SessionId,
     body: SendMessageRequest,
     db: DbDep,
+    request: Request,
 ) -> SendMessageResponse:
     """Send a user message and receive the assistant's reply.
 
@@ -345,6 +404,7 @@ async def send_message(
         session_id: UUID of the target session.
         body:       Request body containing the user's ``content`` string.
         db:         Injected async SQLAlchemy session.
+        request:    FastAPI Request object (used for client IP rate limiting).
 
     Returns:
         A :class:`~app.chat.schemas.SendMessageResponse` with the assistant
@@ -355,8 +415,25 @@ async def send_message(
         ChatSessionExpiredError (→ HTTP 410): If the session has expired.
         ChatInvalidStateError (→ HTTP 409): If the session is in a terminal
             state (``confirmed`` or ``expired``).
+        ChatTooManyMessagesError (→ HTTP 422): If the session has reached
+            the maximum allowed message count.
         ChatSlotExtractionError (→ HTTP 502): If the LLM call fails.
+        HTTP 429: If the client has exceeded the per-IP rate limit.
     """
+    # Rate-limit check: 5 messages per 10 seconds per client IP
+    client_ip = (request.client.host if request.client else "unknown") or "unknown"
+    allowed, retry_after = _check_rate_limit(client_ip)
+    if not allowed:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=429,
+            content={
+                "error_code": "CHAT_RATE_LIMITED",
+                "message": "Too many messages. Please wait before sending another.",
+                "details": {"retry_after_seconds": round(retry_after, 1)},
+            },
+            headers={"Retry-After": str(int(retry_after) + 1)},
+        )
+
     service = ChatService(db=db)
 
     logger.info(
@@ -455,13 +532,51 @@ async def send_message(
         },
         410: {"description": "Session has expired"},
         422: {
-            "description": "Slot overrides produced an invalid OptimizationRequest",
+            "description": (
+                "Slot overrides are invalid (too many keys, unrecognised field "
+                "names, or the merged slots fail OptimizationRequest validation)"
+            ),
             "content": {
                 "application/json": {
-                    "example": {
-                        "error_code": "INTERNAL_ERROR",
-                        "message": "budget: Input should be greater than 0",
-                        "details": {},
+                    "examples": {
+                        "invalid_field": {
+                            "summary": "Unrecognised slot override key",
+                            "value": {
+                                "error_code": "CHAT_SLOT_OVERRIDE_ERROR",
+                                "message": (
+                                    "slot_overrides contains unrecognised field "
+                                    "names: ['unknown_field']."
+                                ),
+                                "details": {
+                                    "session_id": "abc-123",
+                                    "invalid_keys": ["unknown_field"],
+                                    "max_keys": 20,
+                                },
+                            },
+                        },
+                        "too_many_keys": {
+                            "summary": "Too many slot override keys",
+                            "value": {
+                                "error_code": "CHAT_SLOT_OVERRIDE_ERROR",
+                                "message": (
+                                    "slot_overrides contains 25 keys, which "
+                                    "exceeds the maximum of 20."
+                                ),
+                                "details": {
+                                    "session_id": "abc-123",
+                                    "invalid_keys": [],
+                                    "max_keys": 20,
+                                },
+                            },
+                        },
+                        "validation_error": {
+                            "summary": "Merged slots fail validation",
+                            "value": {
+                                "error_code": "INTERNAL_ERROR",
+                                "message": "budget: Input should be greater than 0",
+                                "details": {},
+                            },
+                        },
                     }
                 }
             },
@@ -491,6 +606,8 @@ async def confirm_session(
             already been confirmed.
         ChatInvalidStateError (→ HTTP 409): If the session is not in
             ``pending_confirmation`` state.
+        ChatSlotOverrideError (→ HTTP 422): If ``slot_overrides`` contains
+            too many keys or unrecognised field names.
         ValueError (→ HTTP 422): If the merged slots cannot be parsed into
             a valid ``OptimizationRequest`` (e.g. invalid slot overrides).
     """

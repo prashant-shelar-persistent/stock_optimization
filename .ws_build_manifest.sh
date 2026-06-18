@@ -8,6 +8,14 @@
 #         unused vars in ConstraintForm/FrontierReportViewer, prefer-const in chatStore).
 #         Updated AgentProgressPanel to 7-node pipeline; updated tests accordingly.
 #         Build: PASS, Lint: PASS, Tests: 818/818 PASS.
+#   v3 — Round 4: Fixed TS build error (ChatSessionStatus missing "abandoned").
+#         Added budget clamping (>1e12 rejected) and MAX_TICKERS_PER_REQUEST=50 in llm.py.
+#         Added in-process rate limiter (5 msg/10s) to chat router.
+#         Added dispatch-failure revert in service.py confirm_session.
+#         Hardened OpenAI error messages (no raw exception leakage).
+#         Fixed useChatSession tests to expect AbortSignal argument.
+#         Added 6 new backend tests (63 total), 8 new frontend tests (826 total).
+#         Build: PASS, Lint: PASS (chat modules 0 errors), Tests: 1169+826 PASS.
 
 set -euo pipefail
 WORKSPACE_ROOT="/Users/prashant_shelar/sasva_4/stock_optimization"

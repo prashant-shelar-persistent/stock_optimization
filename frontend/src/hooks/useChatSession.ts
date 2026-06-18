@@ -14,6 +14,11 @@
  *     before the API call resolves, so the UI feels instant.
  *   - Error handling: API errors are caught, formatted, and stored in
  *     chatStore.error so the ChatAssistant panel can surface them.
+ *     AbortError is silently swallowed — it is not a user-facing error.
+ *   - Abort safety: each sendMessage / confirmRun call creates its own
+ *     AbortController. The latest controller is stored on a ref so the
+ *     cleanup effect can cancel any in-flight request when the component
+ *     unmounts or the panel closes.
  *   - The hook is stable across renders (all callbacks are memoised with
  *     useCallback and have minimal dependency arrays).
  *
@@ -24,7 +29,7 @@
  *   - rehydrate(sessionId)   — reload full session state from the backend
  */
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   createChatSession,
   sendChatMessage,
@@ -102,12 +107,28 @@ export function useChatSession(): UseChatSessionReturn {
     [],
   );
 
-  // ── sendMessage ─────────────────────────────────────────────────────────────
+  // Track the latest in-flight AbortController so we can cancel it on unmount.
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cancel any in-flight request when the component unmounts.
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  // ── sendMessage ────────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(
     async (content: string): Promise<string | null> => {
       const trimmed = content.trim();
       if (!trimmed) return null;
+
+      // Cancel any previous in-flight request before starting a new one
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const { signal } = controller;
 
       // Clear any previous error and set the sending flag
       setError(null);
@@ -123,9 +144,10 @@ export function useChatSession(): UseChatSessionReturn {
 
         if (!sessionId) {
           // First message — create a new session seeded with this message
-          const session = await createChatSession({
-            initial_message: trimmed,
-          });
+          const session = await createChatSession(
+            { initial_message: trimmed },
+            signal,
+          );
 
           // Record the session ID (this also resets conversation state)
           setSessionId(session.session_id);
@@ -152,20 +174,25 @@ export function useChatSession(): UseChatSessionReturn {
         }
 
         // Subsequent message — send to the existing session
-        const response = await sendChatMessage(sessionId, trimmed);
+        const response = await sendChatMessage(sessionId, trimmed, signal);
 
         // Apply the assistant reply atomically to the store
         applyAssistantReply({
           content: response.reply,
-          extractedSlots: response.payload_preview ?? null,
+          extractedSlots: response.session.extracted_slots ?? null,
           payloadPreview: response.payload_preview,
-          status: response.status,
+          status: response.session.status,
           timestamp: new Date().toISOString(),
         });
 
         setIsSending(false);
         return response.reply;
       } catch (err) {
+        // Silently swallow AbortError — it is not a user-facing error
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setIsSending(false);
+          return null;
+        }
         const message =
           err instanceof Error ? err.message : "Failed to send message";
         setError(message);
@@ -187,7 +214,7 @@ export function useChatSession(): UseChatSessionReturn {
     ],
   );
 
-  // ── confirmRun ──────────────────────────────────────────────────────────────
+  // ── confirmRun ─────────────────────────────────────────────────────────────
 
   const confirmRun = useCallback(
     async (
@@ -199,13 +226,21 @@ export function useChatSession(): UseChatSessionReturn {
         return null;
       }
 
+      // Cancel any previous in-flight request before starting a new one
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const { signal } = controller;
+
       setError(null);
       setIsConfirming(true);
 
       try {
-        const response = await confirmChatRun(sessionId, {
-          slot_overrides: overrides ?? null,
-        });
+        const response = await confirmChatRun(
+          sessionId,
+          { slot_overrides: overrides ?? null },
+          signal,
+        );
 
         // Record the confirmed run ID (also updates status + clears payload)
         setConfirmedRunId(response.run_id);
@@ -213,6 +248,11 @@ export function useChatSession(): UseChatSessionReturn {
         setIsConfirming(false);
         return response.run_id;
       } catch (err) {
+        // Silently swallow AbortError — it is not a user-facing error
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setIsConfirming(false);
+          return null;
+        }
         const message =
           err instanceof Error ? err.message : "Failed to confirm run";
         setError(message);
@@ -223,20 +263,29 @@ export function useChatSession(): UseChatSessionReturn {
     [getSessionId, setConfirmedRunId, setError, setIsConfirming],
   );
 
-  // ── resetSession ────────────────────────────────────────────────────────────
+  // ── resetSession ───────────────────────────────────────────────────────────
 
   const resetSession = useCallback(() => {
+    // Cancel any in-flight request when resetting
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     resetSessionStore();
   }, [resetSessionStore]);
 
-  // ── rehydrate ───────────────────────────────────────────────────────────────
+  // ── rehydrate ──────────────────────────────────────────────────────────────
 
   const rehydrate = useCallback(
     async (sessionId: string): Promise<boolean> => {
       setError(null);
 
+      // Cancel any previous in-flight request
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const { signal } = controller;
+
       try {
-        const session = await getChatSession(sessionId);
+        const session = await getChatSession(sessionId, signal);
 
         // Restore session ID (resets conversation state first)
         setSessionId(session.session_id);
@@ -252,6 +301,10 @@ export function useChatSession(): UseChatSessionReturn {
 
         return true;
       } catch (err) {
+        // Silently swallow AbortError — it is not a user-facing error
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return false;
+        }
         const message =
           err instanceof Error ? err.message : "Failed to reload session";
         setError(message);

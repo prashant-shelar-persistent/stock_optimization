@@ -58,26 +58,48 @@ const mockGetChatSession = vi.mocked(getChatSession);
 
 const MOCK_SESSION: ChatSession = {
   session_id: "sess-abc-123",
-  status: "active",
+  status: "collecting",
   messages: [
     { role: "user", content: "Build me a portfolio", timestamp: "2024-06-01T12:00:00.000Z" },
     { role: "assistant", content: "What tickers?", timestamp: "2024-06-01T12:00:01.000Z" },
   ],
   extracted_slots: { tickers: ["AAPL"] },
+  run_id: null,
   created_at: "2024-06-01T12:00:00.000Z",
+  updated_at: "2024-06-01T12:00:01.000Z",
 };
 
 const MOCK_SEND_RESPONSE: SendChatMessageResponse = {
   reply: "Great, I have AAPL. What budget?",
-  status: "active",
-  extracted_slots: { tickers: ["AAPL"] },
+  session: {
+    session_id: "sess-abc-123",
+    status: "collecting",
+    messages: [
+      { role: "user", content: "AAPL and MSFT", timestamp: "2024-06-01T12:01:00.000Z" },
+      { role: "assistant", content: "Great, I have AAPL. What budget?", timestamp: "2024-06-01T12:01:01.000Z" },
+    ],
+    extracted_slots: { tickers: ["AAPL"] },
+    run_id: null,
+    created_at: "2024-06-01T12:00:00.000Z",
+    updated_at: "2024-06-01T12:01:01.000Z",
+  },
   payload_preview: null,
 };
 
 const MOCK_PENDING_RESPONSE: SendChatMessageResponse = {
   reply: "Ready to confirm!",
-  status: "pending_confirmation",
-  extracted_slots: { tickers: ["AAPL"], budget: 10000 },
+  session: {
+    session_id: "sess-abc-123",
+    status: "pending_confirmation",
+    messages: [
+      { role: "user", content: "Budget is $10k", timestamp: "2024-06-01T12:02:00.000Z" },
+      { role: "assistant", content: "Ready to confirm!", timestamp: "2024-06-01T12:02:01.000Z" },
+    ],
+    extracted_slots: { tickers: ["AAPL"], budget: 10000 },
+    run_id: null,
+    created_at: "2024-06-01T12:00:00.000Z",
+    updated_at: "2024-06-01T12:02:01.000Z",
+  },
   payload_preview: { tickers: ["AAPL"], budget: 10000 },
 };
 
@@ -136,9 +158,10 @@ describe("sendMessage", () => {
     });
 
     expect(mockCreateChatSession).toHaveBeenCalledOnce();
-    expect(mockCreateChatSession).toHaveBeenCalledWith({
-      initial_message: "Build me a portfolio",
-    });
+    expect(mockCreateChatSession).toHaveBeenCalledWith(
+      { initial_message: "Build me a portfolio" },
+      expect.any(AbortSignal),
+    );
   });
 
   it("sets the session ID in the store after creating a session", async () => {
@@ -177,7 +200,11 @@ describe("sendMessage", () => {
     });
 
     expect(mockSendChatMessage).toHaveBeenCalledOnce();
-    expect(mockSendChatMessage).toHaveBeenCalledWith("sess-abc-123", "AAPL and MSFT");
+    expect(mockSendChatMessage).toHaveBeenCalledWith(
+      "sess-abc-123",
+      "AAPL and MSFT",
+      expect.any(AbortSignal),
+    );
     expect(mockCreateChatSession).not.toHaveBeenCalled();
   });
 
@@ -308,7 +335,11 @@ describe("confirmRun", () => {
     });
 
     expect(mockConfirmChatRun).toHaveBeenCalledOnce();
-    expect(mockConfirmChatRun).toHaveBeenCalledWith("sess-abc-123", { slot_overrides: null });
+    expect(mockConfirmChatRun).toHaveBeenCalledWith(
+      "sess-abc-123",
+      { slot_overrides: null },
+      expect.any(AbortSignal),
+    );
   });
 
   it("returns the run_id on success", async () => {
@@ -349,9 +380,11 @@ describe("confirmRun", () => {
       await result.current.confirmRun({ budget: 20000 });
     });
 
-    expect(mockConfirmChatRun).toHaveBeenCalledWith("sess-abc-123", {
-      slot_overrides: { budget: 20000 },
-    });
+    expect(mockConfirmChatRun).toHaveBeenCalledWith(
+      "sess-abc-123",
+      { slot_overrides: { budget: 20000 } },
+      expect.any(AbortSignal),
+    );
   });
 
   it("sets error and returns null when confirmChatRun fails", async () => {
@@ -430,7 +463,7 @@ describe("rehydrate", () => {
       await result.current.rehydrate("sess-abc-123");
     });
 
-    expect(mockGetChatSession).toHaveBeenCalledWith("sess-abc-123");
+    expect(mockGetChatSession).toHaveBeenCalledWith("sess-abc-123", expect.any(AbortSignal));
   });
 
   it("returns true on success", async () => {

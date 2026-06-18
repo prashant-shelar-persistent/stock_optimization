@@ -54,11 +54,13 @@ exception handler in ``main.py`` converts them to structured JSON responses
 with the correct HTTP status codes.
 
 Mapping:
-    ``ChatSessionNotFoundError``       → HTTP 404
-    ``ChatSessionExpiredError``        → HTTP 410
+    ``ChatSessionNotFoundError``         → HTTP 404
+    ``ChatSessionExpiredError``          → HTTP 410
     ``ChatSessionAlreadyConfirmedError`` → HTTP 409
-    ``ChatInvalidStateError``          → HTTP 409
-    ``ChatSlotExtractionError``        → HTTP 502
+    ``ChatInvalidStateError``            → HTTP 409
+    ``ChatSlotExtractionError``          → HTTP 502
+    ``ChatTooManyMessagesError``         → HTTP 422
+    ``ChatSlotOverrideError``            → HTTP 422
 """
 
 from __future__ import annotations
@@ -78,11 +80,14 @@ from app.chat.schemas import (
     ExtractedSlots,
     SendMessageResponse,
 )
+from app.core.config import get_settings
 from app.core.exceptions import (
     ChatInvalidStateError,
     ChatSessionAlreadyConfirmedError,
     ChatSessionExpiredError,
     ChatSessionNotFoundError,
+    ChatSlotOverrideError,
+    ChatTooManyMessagesError,
 )
 from app.core.logging import get_logger
 from app.db.models import ChatSession
@@ -95,7 +100,25 @@ logger = get_logger(__name__)
 
 #: Default session TTL in hours.  Sessions that have not been confirmed within
 #: this window are considered expired and will no longer accept new messages.
+#: The actual value is read from ``Settings.CHAT_SESSION_TTL_HOURS`` at
+#: service construction time; this constant is the fallback for tests that
+#: construct :class:`ChatService` without a settings object.
 DEFAULT_SESSION_TTL_HOURS: int = 24
+
+#: Default maximum number of messages (user + assistant combined) per session.
+#: The actual value is read from ``Settings.CHAT_MAX_MESSAGES_PER_SESSION``.
+DEFAULT_MAX_MESSAGES_PER_SESSION: int = 50
+
+#: Default maximum number of keys allowed in ``slot_overrides``.
+#: The actual value is read from ``Settings.CHAT_MAX_SLOT_OVERRIDE_KEYS``.
+DEFAULT_MAX_SLOT_OVERRIDE_KEYS: int = 20
+
+#: The set of valid field names that may appear in ``slot_overrides``.
+#: Derived from :class:`~app.chat.schemas.ExtractedSlots` model fields so
+#: that any future schema additions are automatically reflected here.
+VALID_SLOT_OVERRIDE_KEYS: frozenset[str] = frozenset(
+    ExtractedSlots.model_fields.keys()
+)
 
 #: Greeting message sent by the assistant when a new session is created
 #: without an initial user message.
@@ -121,8 +144,18 @@ class ChatService:
                      When ``None``, the module-level singleton returned by
                      :func:`~app.chat.llm.get_slot_filler` is used.  Inject
                      a mock in tests.
-        session_ttl_hours: Session TTL in hours.  Defaults to
-                           :data:`DEFAULT_SESSION_TTL_HOURS`.
+        session_ttl_hours: Session TTL in hours.  When ``None`` (default),
+                           the value is read from
+                           ``Settings.CHAT_SESSION_TTL_HOURS``.
+        max_messages_per_session: Maximum total messages (user + assistant)
+                           allowed per session before
+                           :class:`~app.core.exceptions.ChatTooManyMessagesError`
+                           is raised.  When ``None`` (default), the value is
+                           read from ``Settings.CHAT_MAX_MESSAGES_PER_SESSION``.
+        max_slot_override_keys: Maximum number of keys allowed in the
+                           ``slot_overrides`` dict on the confirm endpoint.
+                           When ``None`` (default), the value is read from
+                           ``Settings.CHAT_MAX_SLOT_OVERRIDE_KEYS``.
 
     Example::
 
@@ -138,11 +171,32 @@ class ChatService:
         self,
         db: AsyncSession,
         slot_filler: LLMSlotFiller | None = None,
-        session_ttl_hours: int = DEFAULT_SESSION_TTL_HOURS,
+        session_ttl_hours: int | None = None,
+        max_messages_per_session: int | None = None,
+        max_slot_override_keys: int | None = None,
     ) -> None:
         self._db = db
         self._slot_filler: LLMSlotFiller = slot_filler or get_slot_filler()
-        self._session_ttl_hours = session_ttl_hours
+
+        # Read limits from config, falling back to the module-level defaults.
+        # Callers (and tests) may override individual limits by passing them
+        # explicitly; ``None`` means "use the configured value".
+        _settings = get_settings()
+        self._session_ttl_hours: int = (
+            session_ttl_hours
+            if session_ttl_hours is not None
+            else _settings.CHAT_SESSION_TTL_HOURS
+        )
+        self._max_messages_per_session: int = (
+            max_messages_per_session
+            if max_messages_per_session is not None
+            else _settings.CHAT_MAX_MESSAGES_PER_SESSION
+        )
+        self._max_slot_override_keys: int = (
+            max_slot_override_keys
+            if max_slot_override_keys is not None
+            else _settings.CHAT_MAX_SLOT_OVERRIDE_KEYS
+        )
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -315,8 +369,24 @@ class ChatService:
             slot_overrides=slot_overrides,
         )
 
-        # Dispatch the optimization run
-        run_id = await self._dispatch_optimization_run(optimization_request)
+        # Dispatch the optimization run.
+        # On failure: revert session status to "pending_confirmation" so the
+        # user can retry, then re-raise as a service error.
+        try:
+            run_id = await self._dispatch_optimization_run(optimization_request)
+        except Exception as exc:
+            # Revert session status so the user can retry
+            session.status = "pending_confirmation"
+            logger.error(
+                "chat_dispatch_failed_reverting_status",
+                session_id=session_id,
+                error=str(exc),
+            )
+            raise ChatInvalidStateError(
+                session_id=session_id,
+                current_status="pending_confirmation",
+                required_status="pending_confirmation",
+            ) from exc
 
         # Transition session to confirmed
         session.mark_confirmed(run_id=run_id)
@@ -444,9 +514,31 @@ class ChatService:
             content: The user's message text.
 
         Raises:
+            ChatTooManyMessagesError: If the session has already reached the
+                                      configured maximum message count.
             ChatSlotExtractionError: If the LLM call fails or returns an
                                      unparseable response.
         """
+        # Step 0: Enforce the per-session message limit.
+        # Count existing messages *before* appending the new user turn so
+        # that the limit check is consistent regardless of whether the
+        # assistant reply is counted.  We check against the current count
+        # plus 2 (the incoming user message + the forthcoming assistant
+        # reply) to ensure we never exceed the limit after this call.
+        current_count = len(session.messages or [])
+        if current_count + 2 > self._max_messages_per_session:
+            logger.warning(
+                "chat_session_message_limit_reached",
+                session_id=session.session_id,
+                current_count=current_count,
+                max_messages=self._max_messages_per_session,
+            )
+            raise ChatTooManyMessagesError(
+                session_id=session.session_id,
+                message_count=current_count,
+                max_messages=self._max_messages_per_session,
+            )
+
         # Step 1: Append user message
         session.append_message("user", content)
 
@@ -649,6 +741,71 @@ class ChatService:
             last = missing_descriptions[-1]
             return f"Could you please tell me {joined} and {last}?"
 
+    def _validate_slot_overrides(
+        self,
+        session_id: str,
+        slot_overrides: dict[str, Any],
+    ) -> None:
+        """Validate the ``slot_overrides`` dict before applying it.
+
+        Enforces two safety rules:
+
+        1. **Key count limit** — the number of override keys must not exceed
+           ``self._max_slot_override_keys`` (configured via
+           ``Settings.CHAT_MAX_SLOT_OVERRIDE_KEYS``).  This prevents
+           excessively large payloads from being accepted.
+
+        2. **Key name allowlist** — every key must be a recognised field name
+           from :class:`~app.chat.schemas.ExtractedSlots`.  Unknown keys are
+           rejected to prevent injection of arbitrary data into the
+           ``OptimizationRequest`` construction path.
+
+        Args:
+            session_id:     UUID of the session (for error context).
+            slot_overrides: The override dict to validate.
+
+        Raises:
+            ChatSlotOverrideError: If the key count exceeds the limit or if
+                                   any key is not a recognised slot field.
+        """
+        num_keys = len(slot_overrides)
+        if num_keys > self._max_slot_override_keys:
+            logger.warning(
+                "chat_slot_override_too_many_keys",
+                session_id=session_id,
+                num_keys=num_keys,
+                max_keys=self._max_slot_override_keys,
+            )
+            raise ChatSlotOverrideError(
+                session_id=session_id,
+                message=(
+                    f"slot_overrides contains {num_keys} keys, which exceeds "
+                    f"the maximum of {self._max_slot_override_keys}."
+                ),
+                max_keys=self._max_slot_override_keys,
+            )
+
+        invalid_keys = [
+            key for key in slot_overrides if key not in VALID_SLOT_OVERRIDE_KEYS
+        ]
+        if invalid_keys:
+            logger.warning(
+                "chat_slot_override_invalid_keys",
+                session_id=session_id,
+                invalid_keys=invalid_keys,
+                valid_keys=sorted(VALID_SLOT_OVERRIDE_KEYS),
+            )
+            raise ChatSlotOverrideError(
+                session_id=session_id,
+                message=(
+                    f"slot_overrides contains unrecognised field names: "
+                    f"{invalid_keys!r}. "
+                    f"Allowed fields: {sorted(VALID_SLOT_OVERRIDE_KEYS)!r}."
+                ),
+                invalid_keys=invalid_keys,
+                max_keys=self._max_slot_override_keys,
+            )
+
     def _build_optimization_request(
         self,
         session: ChatSession,
@@ -667,8 +824,10 @@ class ChatService:
             A validated :class:`~app.schemas.requests.OptimizationRequest`.
 
         Raises:
-            ChatInvalidStateError: If the session has no extracted slots.
-            ValueError:            If the merged slots fail Pydantic validation.
+            ChatInvalidStateError:  If the session has no extracted slots.
+            ChatSlotOverrideError:  If ``slot_overrides`` contains too many
+                                    keys or unrecognised field names.
+            ValueError:             If the merged slots fail Pydantic validation.
         """
         if not session.extracted_slots:
             raise ChatInvalidStateError(
@@ -676,6 +835,13 @@ class ChatService:
                 current_status=session.status,
                 required_status="pending_confirmation",
                 details={"reason": "No extracted slots found in session"},
+            )
+
+        # Validate slot_overrides before applying them.
+        if slot_overrides:
+            self._validate_slot_overrides(
+                session_id=session.session_id,
+                slot_overrides=slot_overrides,
             )
 
         # Start from the stored extracted slots
@@ -777,7 +943,9 @@ class ChatService:
 def get_chat_service(
     db: AsyncSession,
     slot_filler: LLMSlotFiller | None = None,
-    session_ttl_hours: int = DEFAULT_SESSION_TTL_HOURS,
+    session_ttl_hours: int | None = None,
+    max_messages_per_session: int | None = None,
+    max_slot_override_keys: int | None = None,
 ) -> ChatService:
     """Construct a :class:`ChatService` instance.
 
@@ -793,9 +961,14 @@ def get_chat_service(
         )
 
     Args:
-        db:               Async SQLAlchemy session.
-        slot_filler:      Optional mock slot filler for testing.
-        session_ttl_hours: Session TTL in hours.
+        db:                       Async SQLAlchemy session.
+        slot_filler:              Optional mock slot filler for testing.
+        session_ttl_hours:        Session TTL in hours.  ``None`` reads from
+                                  ``Settings.CHAT_SESSION_TTL_HOURS``.
+        max_messages_per_session: Max messages per session.  ``None`` reads
+                                  from ``Settings.CHAT_MAX_MESSAGES_PER_SESSION``.
+        max_slot_override_keys:   Max slot override keys.  ``None`` reads from
+                                  ``Settings.CHAT_MAX_SLOT_OVERRIDE_KEYS``.
 
     Returns:
         A new :class:`ChatService` instance.
@@ -804,4 +977,6 @@ def get_chat_service(
         db=db,
         slot_filler=slot_filler,
         session_ttl_hours=session_ttl_hours,
+        max_messages_per_session=max_messages_per_session,
+        max_slot_override_keys=max_slot_override_keys,
     )

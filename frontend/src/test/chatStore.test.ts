@@ -191,9 +191,9 @@ describe("setSessionId", () => {
     expect(getState().extractedSlots).toEqual({});
   });
 
-  it("sets sessionStatus to 'active'", () => {
+  it("sets sessionStatus to 'collecting'", () => {
     getState().setSessionId("sess-new");
-    expect(getState().sessionStatus).toBe("active");
+    expect(getState().sessionStatus).toBe("collecting");
   });
 
   it("clears pendingPayload", () => {
@@ -900,5 +900,57 @@ describe("selectShowConfirmCard", () => {
     // Confirm the run — this clears pendingPayload and sets status to 'confirmed'
     getState().setConfirmedRunId("run-final");
     expect(selectShowConfirmCard(getState())).toBe(false);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Round 4 — new tests: id-based dedup and clearError
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("appendMessage dedups by id, not timestamp", () => {
+  it("two messages with identical timestamps but different ids are both appended", () => {
+    const ts = "2024-06-01T12:00:00.000Z";
+    const msg1: ChatMessage = { role: "user", content: "first", timestamp: ts, id: "id-001" };
+    const msg2: ChatMessage = { role: "assistant", content: "second", timestamp: ts, id: "id-002" };
+    getState().appendMessage(msg1);
+    getState().appendMessage(msg2);
+    // Both messages must be present — dedup is by id, not timestamp+role
+    expect(getState().messages).toHaveLength(2);
+    expect(getState().messages[0].id).toBe("id-001");
+    expect(getState().messages[1].id).toBe("id-002");
+  });
+
+  it("a message without an id is still appended (id is optional)", () => {
+    const msg: ChatMessage = { role: "user", content: "no id" };
+    getState().appendMessage(msg);
+    expect(getState().messages).toHaveLength(1);
+    expect(getState().messages[0].content).toBe("no id");
+  });
+});
+
+describe("clearError resets only the error field", () => {
+  it("sets error to null without touching other state", () => {
+    // Set up some state
+    getState().setSessionId("sess-123");
+    getState().setError("Something went wrong");
+    getState().setIsSending(true);
+    getState().setExtractedSlots({ tickers: ["AAPL"], budget: 50000 });
+
+    // Clear the error
+    getState().clearError();
+
+    // Error is cleared
+    expect(getState().error).toBeNull();
+    // Other state is untouched
+    expect(getState().sessionId).toBe("sess-123");
+    expect(getState().isSending).toBe(true);
+    expect(getState().extractedSlots.tickers).toEqual(["AAPL"]);
+    expect(getState().extractedSlots.budget).toBe(50000);
+  });
+
+  it("is a no-op when error is already null", () => {
+    expect(getState().error).toBeNull();
+    getState().clearError();
+    expect(getState().error).toBeNull();
   });
 });

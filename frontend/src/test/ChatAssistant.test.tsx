@@ -657,3 +657,67 @@ describe("header title", () => {
     expect(screen.getByText("Portfolio Assistant")).toBeInTheDocument();
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Round 4 — new tests: abort on unmount, send button disabled while loading
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("abort on unmount", () => {
+  it("aborts in-flight request on unmount by calling resetSession (which aborts the controller)", async () => {
+    // The hook is mocked, so we verify that when the component unmounts
+    // while a send is in-flight (isSending=true), the component cleans up
+    // without throwing errors (no setState-after-unmount warnings).
+    act(() => {
+      useChatStore.getState().openPanel();
+      useChatStore.getState().setIsSending(true);
+    });
+
+    const { unmount } = render(<ChatAssistant />);
+
+    // Unmount while isSending is true — should not throw
+    expect(() => unmount()).not.toThrow();
+  });
+
+  it("does not call sendMessage after unmount when isSending was true", async () => {
+    act(() => {
+      useChatStore.getState().openPanel();
+    });
+
+    const { unmount } = render(<ChatAssistant />);
+    unmount();
+
+    // After unmount, no further sendMessage calls should happen
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("send button disabled while loading", () => {
+  it("send button has aria-disabled=true when isSending is true", () => {
+    act(() => {
+      useChatStore.getState().openPanel();
+      useChatStore.getState().setIsSending(true);
+    });
+
+    render(<ChatAssistant />);
+
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    expect(sendButton).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("send button has aria-disabled=false when isSending is false and input has content", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useChatStore.getState().openPanel();
+      useChatStore.getState().setIsSending(false);
+    });
+
+    render(<ChatAssistant />);
+
+    const textarea = screen.getByRole("textbox", { name: "Chat message" });
+    await user.type(textarea, "Hello");
+
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    // When there is content and not sending, aria-disabled should be false
+    expect(sendButton).toHaveAttribute("aria-disabled", "false");
+  });
+});

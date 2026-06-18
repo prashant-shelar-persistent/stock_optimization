@@ -241,6 +241,10 @@ def _error_code_to_http_status(error_code: str) -> int:
         "CHAT_INVALID_STATE": 409,
         # 502 - upstream LLM call failed or returned unparseable structured output
         "CHAT_SLOT_EXTRACTION_ERROR": 502,
+        # 422 - session has too many messages; client must start a new session
+        "CHAT_TOO_MANY_MESSAGES": 422,
+        # 422 - slot_overrides dict has too many keys or unrecognised field names
+        "CHAT_SLOT_OVERRIDE_ERROR": 422,
         # ── Fallback ────────────────────────────────────────────────────────
         "INTERNAL_ERROR": 500,
     }

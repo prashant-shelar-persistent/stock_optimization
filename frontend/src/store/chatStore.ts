@@ -179,6 +179,13 @@ interface ChatActions {
    */
   setError: (message: string | null) => void;
 
+  /**
+   * Convenience: clear the error field without touching any other state.
+   * Called by ChatAssistant when the user starts typing a new message so
+   * the error banner disappears immediately.
+   */
+  clearError: () => void;
+
   // ── Confirmation ──────────────────────────────────────────────────────────
 
   /**
@@ -253,7 +260,7 @@ export const useChatStore = create<ChatStore>((set) => ({
       // Reset conversation state for the new session
       messages: [],
       extractedSlots: {},
-      sessionStatus: "active",
+      sessionStatus: "collecting",
       pendingPayload: null,
       isSending: false,
       isConfirming: false,
@@ -304,6 +311,8 @@ export const useChatStore = create<ChatStore>((set) => ({
   // ── Error handling ─────────────────────────────────────────────────────────
 
   setError: (message) => set({ error: message }),
+
+  clearError: () => set({ error: null }),
 
   // ── Confirmation ───────────────────────────────────────────────────────────
 

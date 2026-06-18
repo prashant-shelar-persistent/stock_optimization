@@ -91,6 +91,40 @@ class Settings(BaseSettings):
         description="Annual risk-free rate used in Sharpe ratio calculation",
     )
 
+    # ── Chat assistant ────────────────────────────────────────────────────────
+    CHAT_SESSION_TTL_HOURS: int = Field(
+        default=24,
+        ge=1,
+        le=168,  # max 1 week
+        description=(
+            "Time-to-live for chat sessions in hours.  Sessions that have not "
+            "been confirmed within this window are considered expired and will "
+            "no longer accept new messages.  Defaults to 24 hours."
+        ),
+    )
+    CHAT_MAX_MESSAGES_PER_SESSION: int = Field(
+        default=50,
+        ge=4,
+        le=200,
+        description=(
+            "Maximum number of messages (user + assistant combined) allowed in "
+            "a single chat session.  Prevents unbounded conversation growth and "
+            "protects against runaway LLM token costs.  When the limit is "
+            "reached, the service raises ChatTooManyMessagesError (HTTP 422) "
+            "and the client must start a new session.  Defaults to 50."
+        ),
+    )
+    CHAT_MAX_SLOT_OVERRIDE_KEYS: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description=(
+            "Maximum number of keys allowed in the ``slot_overrides`` dict "
+            "supplied to the confirm endpoint.  Prevents excessively large "
+            "override payloads from being accepted.  Defaults to 20."
+        ),
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

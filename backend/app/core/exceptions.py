@@ -400,3 +400,100 @@ class ChatInvalidStateError(PortfolioOptimizerError):
         self.session_id = session_id
         self.current_status = current_status
         self.required_status = required_status
+
+
+class ChatTooManyMessagesError(PortfolioOptimizerError):
+    """Raised when a chat session has reached the maximum allowed message count.
+
+    Each session has a configurable upper bound on the total number of
+    messages (user + assistant combined) to prevent unbounded conversation
+    growth and runaway LLM token costs.  When the limit is reached, the
+    client must start a new session.
+
+    Attributes:
+        session_id:    The UUID string of the session.
+        message_count: The current number of messages in the session.
+        max_messages:  The configured maximum allowed message count.
+
+    Example::
+
+        raise ChatTooManyMessagesError(
+            session_id="abc-123",
+            message_count=52,
+            max_messages=50,
+        )
+        # -> HTTP 422  {"error_code": "CHAT_TOO_MANY_MESSAGES",
+        #              "message": "Chat session 'abc-123' has reached ...",
+        #              "details": {"session_id": "abc-123",
+        #                          "message_count": 52,
+        #                          "max_messages": 50}}
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        message_count: int,
+        max_messages: int,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=(
+                f"Chat session '{session_id}' has reached the maximum allowed "
+                f"message count ({max_messages}). "
+                "Please start a new session to continue."
+            ),
+            error_code="CHAT_TOO_MANY_MESSAGES",
+            details={
+                **(details or {}),
+                "session_id": session_id,
+                "message_count": message_count,
+                "max_messages": max_messages,
+            },
+        )
+        self.session_id = session_id
+        self.message_count = message_count
+        self.max_messages = max_messages
+
+
+class ChatSlotOverrideError(PortfolioOptimizerError):
+    """Raised when the ``slot_overrides`` dict supplied to the confirm endpoint
+    is invalid -- either too many keys or an unrecognised field name.
+
+    Attributes:
+        session_id:      The UUID string of the session.
+        invalid_keys:    List of unrecognised key names (empty when the error
+                         is a key-count violation).
+        max_keys:        The configured maximum number of override keys.
+
+    Example::
+
+        raise ChatSlotOverrideError(
+            session_id="abc-123",
+            invalid_keys=["unknown_field"],
+        )
+        # -> HTTP 422  {"error_code": "CHAT_SLOT_OVERRIDE_ERROR",
+        #              "message": "slot_overrides contains unrecognised fields ...",
+        #              "details": {...}}
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        message: str,
+        invalid_keys: list[str] | None = None,
+        max_keys: int | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="CHAT_SLOT_OVERRIDE_ERROR",
+            details={
+                **(details or {}),
+                "session_id": session_id,
+                "invalid_keys": invalid_keys or [],
+                "max_keys": max_keys,
+            },
+        )
+        self.session_id = session_id
+        self.invalid_keys = invalid_keys or []
+        self.max_keys = max_keys
