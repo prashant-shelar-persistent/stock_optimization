@@ -9,6 +9,9 @@
  *   classicalSharpe — Sharpe ratio from classical optimization
  *   qaoaSharpe      — optional Sharpe ratio from QAOA
  *   vqeSharpe       — optional Sharpe ratio from VQE
+ *
+ * React 19.2: Uses function components with typed props (no forwardRef needed).
+ * JSX transform is handled automatically via react-jsx in tsconfig.
  */
 
 import {
@@ -21,6 +24,7 @@ import {
   ResponsiveContainer,
   Cell,
   LabelList,
+  type TooltipProps,
 } from "recharts";
 import { formatNumber } from "@/lib/utils";
 
@@ -47,19 +51,16 @@ interface SharpeDataPoint {
   isBest: boolean;
 }
 
-interface TooltipPayloadEntry {
-  value: number;
-  payload: SharpeDataPoint;
-}
-
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
-}
-
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function CustomTooltip({ active, payload }: CustomTooltipProps) {
+/**
+ * Custom tooltip rendered by Recharts on hover.
+ * Typed using Recharts' TooltipProps with our SharpeDataPoint payload shape.
+ */
+function CustomTooltip({
+  active,
+  payload,
+}: TooltipProps<number, string> & { payload?: Array<{ payload: SharpeDataPoint }> }) {
   if (!active || !payload || payload.length === 0) return null;
 
   const { name, sharpe, delta, isBest } = payload[0].payload;

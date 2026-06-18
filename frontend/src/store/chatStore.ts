@@ -16,16 +16,35 @@
  * The store is intentionally kept free of async logic — all API calls live
  * in the `useChatSession` hook.  The store only holds derived UI state and
  * provides synchronous actions that the hook calls after each API response.
+ *
+ * React 19 notes
+ * ──────────────
+ * • Uses `devtools` middleware so every action is visible in Redux DevTools,
+ *   which now integrates with the React 19 DevTools timeline.
+ * • Uses `subscribeWithSelector` middleware so external code (e.g. the
+ *   ChatAssistant component) can subscribe to individual slices such as
+ *   `confirmedRunId` without triggering full-store re-renders.
+ * • `useShallow` is re-exported here for consumers that select multiple
+ *   fields at once; React 19's improved batching makes this even more
+ *   effective at eliminating redundant renders.
+ * • `chatStoreApi` is exported for use outside React components — the
+ *   preferred React 19 pattern over accessing the store via a hook in a
+ *   non-component context.
  */
 
 import { create } from "zustand";
+import { devtools, subscribeWithSelector } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 import type {
   ChatMessage,
   ChatSessionStatus,
   ExtractedSlots,
 } from "@/types/api";
 
-// ── State shape ────────────────────────────────────────────────────────────────
+// ── Re-export useShallow for consumers ────────────────────────────────────────
+export { useShallow };
+
+// ── State shape ───────────────────────────────────────────────────────────────
 
 interface ChatState {
   /**
@@ -54,9 +73,10 @@ interface ChatState {
 
   /**
    * Mirrors the backend `ChatSessionStatus`.
-   * - "active"               — conversation in progress, more turns expected
+   * - "collecting"          — conversation in progress, more turns expected
    * - "pending_confirmation" — LLM has enough data; payload preview is ready
    * - "confirmed"            — user confirmed; optimization run dispatched
+   * - "expired"              — session expired on the backend
    * - "abandoned"            — session was abandoned / reset
    * - null                   — no session exists yet
    */
@@ -96,10 +116,10 @@ interface ChatState {
   confirmedRunId: string | null;
 }
 
-// ── Actions ────────────────────────────────────────────────────────────────────
+// ── Actions ───────────────────────────────────────────────────────────────────
 
 interface ChatActions {
-  // ── Panel visibility ──────────────────────────────────────────────────────
+  // ── Panel visibility ───────────────────────────────────────────────────────
 
   /** Open the chat panel. */
   openPanel: () => void;
@@ -110,7 +130,7 @@ interface ChatActions {
   /** Toggle the chat panel open/closed. */
   togglePanel: () => void;
 
-  // ── Session lifecycle ─────────────────────────────────────────────────────
+  // ── Session lifecycle ──────────────────────────────────────────────────────
 
   /**
    * Record the newly created session ID returned by `createChatSession`.
@@ -124,7 +144,7 @@ interface ChatActions {
    */
   setSessionStatus: (status: ChatSessionStatus) => void;
 
-  // ── Message management ────────────────────────────────────────────────────
+  // ── Message management ─────────────────────────────────────────────────────
 
   /**
    * Append a single message to the conversation thread.
@@ -140,7 +160,7 @@ interface ChatActions {
    */
   setMessages: (messages: ChatMessage[]) => void;
 
-  // ── Slot management ───────────────────────────────────────────────────────
+  // ── Slot management ────────────────────────────────────────────────────────
 
   /**
    * Merge new extracted slots into the existing `extractedSlots` object.
@@ -155,7 +175,7 @@ interface ChatActions {
    */
   setExtractedSlots: (slots: ExtractedSlots) => void;
 
-  // ── Payload preview ───────────────────────────────────────────────────────
+  // ── Payload preview ────────────────────────────────────────────────────────
 
   /**
    * Set the payload preview that the user must confirm before the
@@ -163,7 +183,7 @@ interface ChatActions {
    */
   setPendingPayload: (payload: ExtractedSlots | null) => void;
 
-  // ── Loading flags ─────────────────────────────────────────────────────────
+  // ── Loading flags ──────────────────────────────────────────────────────────
 
   /** Set the `isSending` flag (true while a message API call is in-flight). */
   setIsSending: (value: boolean) => void;
@@ -171,7 +191,7 @@ interface ChatActions {
   /** Set the `isConfirming` flag (true while a confirm API call is in-flight). */
   setIsConfirming: (value: boolean) => void;
 
-  // ── Error handling ────────────────────────────────────────────────────────
+  // ── Error handling ─────────────────────────────────────────────────────────
 
   /**
    * Set an error message to display in the chat panel.
@@ -186,7 +206,7 @@ interface ChatActions {
    */
   clearError: () => void;
 
-  // ── Confirmation ──────────────────────────────────────────────────────────
+  // ── Confirmation ───────────────────────────────────────────────────────────
 
   /**
    * Record the `run_id` returned after a successful confirmation.
@@ -194,7 +214,7 @@ interface ChatActions {
    */
   setConfirmedRunId: (runId: string) => void;
 
-  // ── Convenience actions ───────────────────────────────────────────────────
+  // ── Convenience actions ────────────────────────────────────────────────────
 
   /**
    * Convenience: record the assistant's reply after a `sendChatMessage`
@@ -221,7 +241,7 @@ interface ChatActions {
   resetSession: () => void;
 }
 
-// ── Store ──────────────────────────────────────────────────────────────────────
+// ── Store ─────────────────────────────────────────────────────────────────────
 
 export type ChatStore = ChatState & ChatActions;
 
@@ -239,140 +259,209 @@ const INITIAL_STATE: ChatState = {
   confirmedRunId: null,
 };
 
-export const useChatStore = create<ChatStore>((set) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
-  ...INITIAL_STATE,
+/**
+ * The Zustand store instance.
+ *
+ * Middleware stack (innermost → outermost):
+ *   1. `subscribeWithSelector` — enables `store.subscribe(selector, listener)`
+ *      for components that need to react to specific state slices (e.g.
+ *      watching `confirmedRunId` to trigger a navigation side-effect).
+ *   2. `devtools` — integrates with Redux DevTools Extension and the React 19
+ *      DevTools timeline; each action is labelled for easy tracing.
+ */
+export const useChatStore = create<ChatStore>()(
+  devtools(
+    subscribeWithSelector((set) => ({
+      // ── Initial state ────────────────────────────────────────────────────
 
-  // ── Panel visibility ───────────────────────────────────────────────────────
+      ...INITIAL_STATE,
 
-  openPanel: () => set({ isPanelOpen: true }),
+      // ── Panel visibility ─────────────────────────────────────────────────
 
-  closePanel: () => set({ isPanelOpen: false }),
+      openPanel: () => set({ isPanelOpen: true }, false, "chat/openPanel"),
 
-  togglePanel: () =>
-    set((state) => ({ isPanelOpen: !state.isPanelOpen })),
+      closePanel: () => set({ isPanelOpen: false }, false, "chat/closePanel"),
 
-  // ── Session lifecycle ──────────────────────────────────────────────────────
+      togglePanel: () =>
+        set(
+          (state) => ({ isPanelOpen: !state.isPanelOpen }),
+          false,
+          "chat/togglePanel",
+        ),
 
-  setSessionId: (sessionId) =>
-    set({
-      sessionId,
-      // Reset conversation state for the new session
-      messages: [],
-      extractedSlots: {},
-      sessionStatus: "collecting",
-      pendingPayload: null,
-      isSending: false,
-      isConfirming: false,
-      error: null,
-      confirmedRunId: null,
-    }),
+      // ── Session lifecycle ────────────────────────────────────────────────
 
-  setSessionStatus: (status) => set({ sessionStatus: status }),
+      setSessionId: (sessionId) =>
+        set(
+          {
+            sessionId,
+            // Reset conversation state for the new session
+            messages: [],
+            extractedSlots: {},
+            sessionStatus: "collecting",
+            pendingPayload: null,
+            isSending: false,
+            isConfirming: false,
+            error: null,
+            confirmedRunId: null,
+          },
+          false,
+          "chat/setSessionId",
+        ),
 
-  // ── Message management ─────────────────────────────────────────────────────
+      setSessionStatus: (status) =>
+        set({ sessionStatus: status }, false, "chat/setSessionStatus"),
 
-  appendMessage: (message) =>
-    set((state) => ({
-      messages: [...state.messages, message],
+      // ── Message management ───────────────────────────────────────────────
+
+      appendMessage: (message) =>
+        set(
+          (state) => ({
+            messages: [...state.messages, message],
+          }),
+          false,
+          "chat/appendMessage",
+        ),
+
+      setMessages: (messages) =>
+        set({ messages }, false, "chat/setMessages"),
+
+      // ── Slot management ──────────────────────────────────────────────────
+
+      mergeExtractedSlots: (partial) =>
+        set(
+          (state) => {
+            // Only overwrite keys whose incoming value is not null/undefined,
+            // preserving previously extracted values for keys absent in `partial`.
+            const merged: ExtractedSlots = { ...state.extractedSlots };
+            for (const key of Object.keys(partial) as (keyof ExtractedSlots)[]) {
+              const value = partial[key];
+              if (value !== null && value !== undefined) {
+                // Type-safe assignment: each key maps to its own value type
+                (merged as Record<string, unknown>)[key] = value;
+              }
+            }
+            return { extractedSlots: merged };
+          },
+          false,
+          "chat/mergeExtractedSlots",
+        ),
+
+      setExtractedSlots: (slots) =>
+        set({ extractedSlots: slots }, false, "chat/setExtractedSlots"),
+
+      // ── Payload preview ──────────────────────────────────────────────────
+
+      setPendingPayload: (payload) =>
+        set({ pendingPayload: payload }, false, "chat/setPendingPayload"),
+
+      // ── Loading flags ────────────────────────────────────────────────────
+
+      setIsSending: (value) =>
+        set({ isSending: value }, false, "chat/setIsSending"),
+
+      setIsConfirming: (value) =>
+        set({ isConfirming: value }, false, "chat/setIsConfirming"),
+
+      // ── Error handling ───────────────────────────────────────────────────
+
+      setError: (message) =>
+        set({ error: message }, false, "chat/setError"),
+
+      clearError: () =>
+        set({ error: null }, false, "chat/clearError"),
+
+      // ── Confirmation ─────────────────────────────────────────────────────
+
+      setConfirmedRunId: (runId) =>
+        set(
+          {
+            confirmedRunId: runId,
+            sessionStatus: "confirmed",
+            pendingPayload: null,
+            isConfirming: false,
+          },
+          false,
+          "chat/setConfirmedRunId",
+        ),
+
+      // ── Convenience actions ──────────────────────────────────────────────
+
+      applyAssistantReply: ({ content, extractedSlots, payloadPreview, status, timestamp }) =>
+        set(
+          (state) => {
+            // 1. Build the assistant message
+            const assistantMessage: ChatMessage = {
+              role: "assistant",
+              content,
+              ...(timestamp ? { timestamp } : {}),
+            };
+
+            // 2. Merge new slots (only non-null values)
+            const merged: ExtractedSlots = { ...state.extractedSlots };
+            if (extractedSlots) {
+              for (const key of Object.keys(extractedSlots) as (keyof ExtractedSlots)[]) {
+                const value = extractedSlots[key];
+                if (value !== null && value !== undefined) {
+                  (merged as Record<string, unknown>)[key] = value;
+                }
+              }
+            }
+
+            return {
+              messages: [...state.messages, assistantMessage],
+              extractedSlots: merged,
+              pendingPayload: payloadPreview,
+              sessionStatus: status,
+              isSending: false,
+              error: null,
+            };
+          },
+          false,
+          "chat/applyAssistantReply",
+        ),
+
+      resetSession: () =>
+        set(
+          {
+            sessionId: null,
+            messages: [],
+            extractedSlots: {},
+            sessionStatus: null,
+            pendingPayload: null,
+            isSending: false,
+            isConfirming: false,
+            error: null,
+            confirmedRunId: null,
+            // isPanelOpen is intentionally NOT reset — the panel stays open
+            // so the user sees the empty state rather than the panel disappearing.
+          },
+          false,
+          "chat/resetSession",
+        ),
     })),
+    {
+      name: "ChatStore",
+      // Only enable devtools in development to avoid overhead in production
+      enabled: !import.meta.env.PROD,
+    },
+  ),
+);
 
-  setMessages: (messages) => set({ messages }),
+/**
+ * The raw Zustand store API — use this outside React components (e.g. in
+ * API response handlers or navigation guards) to read or mutate state
+ * without hooks.
+ *
+ * @example
+ * ```ts
+ * // In an API utility (not a React component):
+ * chatStoreApi.getState().setError("Network error");
+ * ```
+ */
+export const chatStoreApi = useChatStore;
 
-  // ── Slot management ────────────────────────────────────────────────────────
-
-  mergeExtractedSlots: (partial) =>
-    set((state) => {
-      // Only overwrite keys whose incoming value is not null/undefined,
-      // preserving previously extracted values for keys absent in `partial`.
-      const merged: ExtractedSlots = { ...state.extractedSlots };
-      for (const key of Object.keys(partial) as (keyof ExtractedSlots)[]) {
-        const value = partial[key];
-        if (value !== null && value !== undefined) {
-          // Type-safe assignment: each key maps to its own value type
-          (merged as Record<string, unknown>)[key] = value;
-        }
-      }
-      return { extractedSlots: merged };
-    }),
-
-  setExtractedSlots: (slots) => set({ extractedSlots: slots }),
-
-  // ── Payload preview ────────────────────────────────────────────────────────
-
-  setPendingPayload: (payload) => set({ pendingPayload: payload }),
-
-  // ── Loading flags ──────────────────────────────────────────────────────────
-
-  setIsSending: (value) => set({ isSending: value }),
-
-  setIsConfirming: (value) => set({ isConfirming: value }),
-
-  // ── Error handling ─────────────────────────────────────────────────────────
-
-  setError: (message) => set({ error: message }),
-
-  clearError: () => set({ error: null }),
-
-  // ── Confirmation ───────────────────────────────────────────────────────────
-
-  setConfirmedRunId: (runId) =>
-    set({
-      confirmedRunId: runId,
-      sessionStatus: "confirmed",
-      pendingPayload: null,
-      isConfirming: false,
-    }),
-
-  // ── Convenience actions ────────────────────────────────────────────────────
-
-  applyAssistantReply: ({ content, extractedSlots, payloadPreview, status, timestamp }) =>
-    set((state) => {
-      // 1. Build the assistant message
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content,
-        ...(timestamp ? { timestamp } : {}),
-      };
-
-      // 2. Merge new slots (only non-null values)
-      const merged: ExtractedSlots = { ...state.extractedSlots };
-      if (extractedSlots) {
-        for (const key of Object.keys(extractedSlots) as (keyof ExtractedSlots)[]) {
-          const value = extractedSlots[key];
-          if (value !== null && value !== undefined) {
-            (merged as Record<string, unknown>)[key] = value;
-          }
-        }
-      }
-
-      return {
-        messages: [...state.messages, assistantMessage],
-        extractedSlots: merged,
-        pendingPayload: payloadPreview,
-        sessionStatus: status,
-        isSending: false,
-        error: null,
-      };
-    }),
-
-  resetSession: () =>
-    set({
-      sessionId: null,
-      messages: [],
-      extractedSlots: {},
-      sessionStatus: null,
-      pendingPayload: null,
-      isSending: false,
-      isConfirming: false,
-      error: null,
-      confirmedRunId: null,
-      // isPanelOpen is intentionally NOT reset — the panel stays open
-      // so the user sees the empty state rather than the panel disappearing.
-    }),
-}));
-
-// ── Selector helpers (stable references, avoids unnecessary re-renders) ────────
+// ── Selector helpers (stable references, avoids unnecessary re-renders) ───────
 
 /** Select only the panel open/closed flag. */
 export const selectIsPanelOpen = (s: ChatStore) => s.isPanelOpen;

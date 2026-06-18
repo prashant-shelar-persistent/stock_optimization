@@ -177,6 +177,9 @@ function useToast() {
   const [state, setState] = React.useState<State>(memoryState);
 
   React.useEffect(() => {
+    // Register this component's setState as a listener for module-level state changes.
+    // The empty dependency array ensures we register exactly once per mount and
+    // unregister on unmount — correct for React 19's strict-mode double-invocation.
     listeners.push(setState);
     return () => {
       const index = listeners.indexOf(setState);
@@ -184,7 +187,7 @@ function useToast() {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+  }, []);
 
   return {
     ...state,

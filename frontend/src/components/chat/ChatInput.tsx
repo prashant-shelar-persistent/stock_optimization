@@ -14,19 +14,23 @@
  *   - isSending        — true while the API call is in-flight
  *   - disabled         — true to fully disable the input (e.g. after confirm)
  *   - placeholder      — optional placeholder text
+ *
+ * React 19: Uses `import * as React` for consistent namespace access.
+ * No forwardRef needed — refs are plain props in React 19.
  */
 
+import * as React from "react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { SendHorizonal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const MAX_CHARS = 2000;
 const WARN_THRESHOLD = 1800;
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 export interface ChatInputProps {
   /**
@@ -49,9 +53,14 @@ export interface ChatInputProps {
   onChange?: (value: string) => void;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 
-export function ChatInput({
+/**
+ * ChatInput renders the message composition area with auto-resize and send controls.
+ *
+ * React 19: function component with no forwardRef — refs are plain props.
+ */
+function ChatInput({
   onSend,
   isSending = false,
   disabled = false,
@@ -75,7 +84,7 @@ export function ChatInput({
     autoResize();
   }, [value, autoResize]);
 
-  // ── Submit handler ──────────────────────────────────────────────────────────
+  // ── Submit handler ─────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
@@ -88,7 +97,7 @@ export function ChatInput({
     }
   }, [value, isSending, disabled, onSend]);
 
-  // ── Keyboard handler ────────────────────────────────────────────────────────
+  // ── Keyboard handler ───────────────────────────────────────────────────────
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -100,7 +109,7 @@ export function ChatInput({
     [handleSubmit],
   );
 
-  // ── Derived state ───────────────────────────────────────────────────────────
+  // ── Derived state ──────────────────────────────────────────────────────────
 
   const charCount = value.length;
   const isOverLimit = charCount > MAX_CHARS;
@@ -181,3 +190,6 @@ export function ChatInput({
     </div>
   );
 }
+ChatInput.displayName = "ChatInput";
+
+export { ChatInput };

@@ -15,6 +15,9 @@
  * Props:
  *   weights — array of AssetWeight objects
  *   budget  — total portfolio budget (used if allocation is missing)
+ *
+ * React 19.2: Uses function components with typed props (no forwardRef needed).
+ * JSX transform is handled automatically via react-jsx in tsconfig.
  */
 
 import {

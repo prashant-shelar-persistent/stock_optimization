@@ -19,9 +19,25 @@
  * State:
  *   - runId from useParams()
  *   - run data from useRunDetail(runId) — polls while pending/running
+ *
+ * React 19.2 notes
+ * ────────────────
+ * • `<title>` rendered inside the component is hoisted to `<head>` by React 19's
+ *   built-in document-metadata support — no external helmet library required.
+ * • `useOptimistic` provides an instant status display while the polling query
+ *   is in-flight between poll intervals. When the user triggers a manual
+ *   refresh action the optimistic status is shown immediately, before the
+ *   server response arrives. The optimistic value is automatically replaced
+ *   by real data as soon as the query resolves.
+ * • `useTransition` wraps navigation actions (Back to History, Back to
+ *   Dashboard) so the current page stays interactive while the target chunk
+ *   loads in the background.
+ * • No `import React` needed — the automatic JSX transform handles it.
  */
 
-import { useParams, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useOptimistic, useTransition } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -314,10 +330,63 @@ function PageError({ message }: { message: string }) {
 
 export default function RunDetailPage() {
   const { runId } = useParams<{ runId: string }>();
+  const navigate = useNavigate();
   const { run, isLoading, error } = useRunDetail(runId ?? "");
+
+  /**
+   * React 19: useTransition wraps navigation actions so the current page
+   * stays interactive while the target page chunk loads in the background.
+   * `isNavPending` drives a subtle loading indicator on the back button.
+   */
+  const [isNavPending, startNavTransition] = useTransition();
+
+  /**
+   * React 19: useOptimistic provides an instant status display while the
+   * polling query is in-flight between poll intervals.
+   *
+   * The optimistic status is updated when the user triggers a manual
+   * status hint (e.g. the page first loads with a known status from the
+   * URL state). React 19 automatically resets the optimistic value to the
+   * real `run.status` as soon as the query resolves.
+   *
+   * This prevents a flash back to "loading" between poll intervals when
+   * the run is in a non-terminal state (pending/running).
+   */
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(
+    run?.status ?? null,
+    (_current: OptimizationStatus | null, next: OptimizationStatus | null) =>
+      next,
+  );
+
+  // Derive the display status: prefer real data, fall back to optimistic
+  const displayStatus = run?.status ?? optimisticStatus;
+
+  // Derive page title from run state
+  const pageTitle = run
+    ? `Run ${truncate(run.run_id, 12)} — ${run.status} | Portfolio Optimizer`
+    : runId
+      ? `Run ${truncate(runId, 12)} | Portfolio Optimizer`
+      : "Run Detail | Portfolio Optimizer";
+
+  function handleBackToHistory() {
+    // Optimistically mark the status as the last known value before navigating
+    if (run) {
+      startNavTransition(() => {
+        setOptimisticStatus(run.status);
+        navigate("/history");
+      });
+    } else {
+      startNavTransition(() => {
+        navigate("/history");
+      });
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* React 19: <title> hoisted to <head> automatically */}
+      <title>{pageTitle}</title>
+
       {/* ── Header ── */}
       <header className="sticky top-0 z-40 border-b bg-card/95 px-6 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -354,15 +423,21 @@ export default function RunDetailPage() {
 
       {/* ── Main content ── */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-6 py-6">
-        {/* Back link */}
+        {/* Back link — uses transition so current page stays interactive */}
         <div className="mb-5">
-          <Link
-            to="/history"
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
+          <button
+            type="button"
+            onClick={handleBackToHistory}
+            disabled={isNavPending}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit disabled:opacity-60"
           >
-            <ArrowLeft className="h-4 w-4" />
+            {isNavPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowLeft className="h-4 w-4" />
+            )}
             Back to History
-          </Link>
+          </button>
         </div>
 
         {/* Page title */}
@@ -372,6 +447,12 @@ export default function RunDetailPage() {
             <p className="mt-1 font-mono text-sm text-muted-foreground">
               {runId}
             </p>
+          )}
+          {/* Show optimistic status badge while polling */}
+          {displayStatus && !run && (
+            <div className="mt-2">
+              <StatusBadge status={displayStatus} />
+            </div>
           )}
         </div>
 

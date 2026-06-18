@@ -14,13 +14,16 @@
  *                 absolute time label
  *   - isLoading — when true, renders an animated typing indicator instead
  *                 of content (used for the "assistant is thinking" state)
+ *
+ * React 19: Uses `import * as React` for consistent namespace access.
+ * No forwardRef needed — refs are plain props in React 19.
  */
 
 import { Bot, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatRole } from "@/types/api";
 
-// ── Typing indicator ──────────────────────────────────────────────────────────
+// ── Typing indicator ───────────────────────────────────────────────────────────
 
 function TypingIndicator() {
   return (
@@ -38,8 +41,9 @@ function TypingIndicator() {
     </span>
   );
 }
+TypingIndicator.displayName = "TypingIndicator";
 
-// ── Timestamp formatter ───────────────────────────────────────────────────────
+// ── Timestamp formatter ────────────────────────────────────────────────────────
 
 function formatTimestamp(iso: string): string {
   try {
@@ -64,7 +68,7 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 export interface ChatMessageProps {
   /** Who sent this message. */
@@ -81,9 +85,14 @@ export interface ChatMessageProps {
   isLoading?: boolean;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 
-export function ChatMessage({
+/**
+ * ChatMessage renders a single message row with avatar, bubble, and timestamp.
+ *
+ * React 19: function component with no forwardRef — refs are plain props.
+ */
+function ChatMessage({
   role,
   content,
   timestamp,
@@ -151,3 +160,6 @@ export function ChatMessage({
     </div>
   );
 }
+ChatMessage.displayName = "ChatMessage";
+
+export { ChatMessage };

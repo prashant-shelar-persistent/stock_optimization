@@ -2,9 +2,9 @@
  * ComparisonDashboard — Side-by-side comparison of Classical vs Quantum results.
  *
  * Layout:
- *   ┌─────────────────────────────────────────────────────────────┐
+ *   ┌────────────────────────────────────────────────────────────┐
  *   │  Sharpe Ratio Comparison (horizontal bar chart)             │
- *   ├─────────────────────────────────────────────────────────────┤
+ *   ├────────────────────────────────────────────────────────────┤
  *   │  Tabs: Classical | QAOA | VQE                               │
  *   │  ┌──────────────────────┬──────────────────────────────┐    │
  *   │  │  Allocation Pie      │  Metrics Cards               │    │
@@ -12,16 +12,21 @@
  *   │  ├──────────────────────┴──────────────────────────────┤    │
  *   │  │  Weights Table                                       │    │
  *   │  └──────────────────────────────────────────────────────┘    │
- *   ├─────────────────────────────────────────────────────────────┤
+ *   ├────────────────────────────────────────────────────────────┤
  *   │  Full Metrics Comparison Bar Chart (all strategies)         │
- *   ├─────────────────────────────────────────────────────────────┤
+ *   ├────────────────────────────────────────────────────────────┤
  *   │  Comparison Summary (improvement deltas)                    │
- *   ├─────────────────────────────────────────────────────────────┤
+ *   ├────────────────────────────────────────────────────────────┤
  *   │  LLM Explanation Panel                                      │
- *   └─────────────────────────────────────────────────────────────┘
+ *   └────────────────────────────────────────────────────────────┘
  *
  * Props:
  *   result — OptimizationRunDetail from the completed optimization
+ *
+ * React 19 migration notes:
+ *   - No forwardRef — refs are plain props in React 19
+ *   - Removed React namespace prefix where not needed
+ *   - Type-only imports use `import type`
  */
 
 import { useUIStore, selectActiveTab } from "@/store/uiStore";
@@ -83,8 +88,12 @@ function formatSolveTime(ms: number): string {
 
 function RecommendationBanner({ recommendation }: { recommendation: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-      <Award className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+    <div
+      className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
+      role="note"
+      aria-label="Strategy recommendation"
+    >
+      <Award className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-primary">
           Recommendation
@@ -122,15 +131,16 @@ function ImprovementRow({
       <span className="text-muted-foreground">{label}</span>
       <div className="flex items-center gap-1">
         {isGood ? (
-          <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+          <TrendingUp className="h-3.5 w-3.5 text-green-500" aria-hidden="true" />
         ) : (
-          <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+          <TrendingDown className="h-3.5 w-3.5 text-red-500" aria-hidden="true" />
         )}
         <span
           className={cn(
             "font-medium tabular-nums",
             isGood ? "text-green-600 dark:text-green-400" : "text-red-500",
           )}
+          aria-label={`${label}: ${formattedDelta} (${isGood ? "improvement" : "decline"})`}
         >
           {formattedDelta}
         </span>
@@ -181,7 +191,7 @@ function ClassicalTabContent({ result }: { result: OptimizationRunDetail }) {
       {/* Max drawdown if available */}
       {metrics.max_drawdown !== undefined && (
         <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
-          <TrendingDown className="h-4 w-4 text-red-500" />
+          <TrendingDown className="h-4 w-4 text-red-500" aria-hidden="true" />
           <span className="text-sm text-muted-foreground">Max Drawdown:</span>
           <span className="text-sm font-semibold text-red-500">
             {formatPercent(metrics.max_drawdown)}
@@ -192,9 +202,9 @@ function ClassicalTabContent({ result }: { result: OptimizationRunDetail }) {
       {/* Solver info */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span>Solver: CVXPY (Markowitz MVO)</span>
-        <span>•</span>
+        <span aria-hidden="true">•</span>
         {getSolverStatusBadge(solver_status)}
-        <span>•</span>
+        <span aria-hidden="true">•</span>
         <span>Solved in {formatSolveTime(solve_time_ms)}</span>
       </div>
 
@@ -428,8 +438,11 @@ function ComparisonSummarySection({ result }: { result: OptimizationRunDetail })
 
   if (!hasQuantum) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/20">
-        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+      <div
+        className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/20"
+        role="note"
+      >
+        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" aria-hidden="true" />
         <p className="text-sm text-amber-700 dark:text-amber-400">
           Quantum optimization was not run. Enable it in the constraint form to
           compare classical vs quantum strategies.
@@ -590,14 +603,14 @@ export function ComparisonDashboard({ result }: ComparisonDashboardProps) {
             <TabsList className="mb-4">
               <TabsTrigger value="classical">
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span className="h-2 w-2 rounded-full bg-blue-500" aria-hidden="true" />
                   Classical
                 </span>
               </TabsTrigger>
               {result.quantum_result?.qaoa && (
                 <TabsTrigger value="qaoa">
                   <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-violet-500" />
+                    <span className="h-2 w-2 rounded-full bg-violet-500" aria-hidden="true" />
                     QAOA
                   </span>
                 </TabsTrigger>
@@ -605,7 +618,7 @@ export function ComparisonDashboard({ result }: ComparisonDashboardProps) {
               {result.quantum_result?.vqe && (
                 <TabsTrigger value="vqe">
                   <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-purple-500" />
+                    <span className="h-2 w-2 rounded-full bg-purple-500" aria-hidden="true" />
                     VQE
                   </span>
                 </TabsTrigger>

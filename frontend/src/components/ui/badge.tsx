@@ -4,7 +4,7 @@
  * Provides small status indicators for optimization run status,
  * solver status, and other categorical labels.
  *
- * Variants: default | secondary | destructive | outline | quantum | classical
+ * Variants: default | secondary | destructive | outline | success | warning | quantum | classical
  *
  * Usage:
  *   <Badge>Completed</Badge>
@@ -47,12 +47,12 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span className={cn(badgeVariants({ variant }), className)} {...props} />
   );
 }
 

@@ -4,6 +4,8 @@
  * Displays a sector name with a max-weight slider and numeric input.
  * The slider and input are kept in sync — editing either updates both.
  *
+ * React 19: uses named imports — no `import * as React` needed.
+ *
  * Usage:
  *   <SectorConstraintRow
  *     sector="Technology"
@@ -14,7 +16,12 @@
  *   />
  */
 
-import * as React from "react";
+import {
+  useState,
+  useEffect,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import { Trash2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
@@ -36,6 +43,16 @@ export interface SectorConstraintRowProps {
   className?: string;
 }
 
+/** Formats a weight (0.0–1.0) as a whole-number percentage string. */
+function formatWeight(w: number): string {
+  return (w * 100).toFixed(0);
+}
+
+/** Clamps a weight value to the valid range [0.01, 1.0]. */
+function clamp(value: number): number {
+  return Math.min(1, Math.max(0.01, value));
+}
+
 export function SectorConstraintRow({
   sector,
   maxWeight,
@@ -45,22 +62,14 @@ export function SectorConstraintRow({
   className,
 }: SectorConstraintRowProps) {
   // Local input string state so the user can type freely without clamping mid-edit
-  const [inputValue, setInputValue] = React.useState(
+  const [inputValue, setInputValue] = useState(
     formatWeight(maxWeight),
   );
 
   // Keep local input in sync when maxWeight changes externally
-  React.useEffect(() => {
+  useEffect(() => {
     setInputValue(formatWeight(maxWeight));
   }, [maxWeight]);
-
-  function formatWeight(w: number): string {
-    return (w * 100).toFixed(0);
-  }
-
-  function clamp(value: number): number {
-    return Math.min(1, Math.max(0.01, value));
-  }
 
   function handleSliderChange(values: number[]) {
     const newWeight = values[0];
@@ -68,7 +77,7 @@ export function SectorConstraintRow({
     setInputValue(formatWeight(newWeight));
   }
 
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleInputChange(e: ChangeEvent<HTMLInputElement>) {
     setInputValue(e.target.value);
   }
 
@@ -84,7 +93,7 @@ export function SectorConstraintRow({
     }
   }
 
-  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleInputKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       (e.target as HTMLInputElement).blur();
     }

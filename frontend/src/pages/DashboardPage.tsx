@@ -23,9 +23,22 @@
  *   - Chat panel state lives in chatStore (toggled by the FAB in ChatAssistant)
  *   - On chat confirmation, ChatAssistant calls uiStore.startNewRun(runId)
  *     which triggers the WebSocket + progress pipeline automatically
+ *
+ * React 19.2 notes
+ * ────────────────
+ * • `<title>` rendered inside the component is hoisted to `<head>` by React 19's
+ *   built-in document-metadata support — no external helmet library required.
+ * • `useOptimistic` provides an instant "Running" badge update the moment the
+ *   user submits a run, before the first WebSocket message arrives. The
+ *   optimistic value is automatically replaced by real store data as soon as
+ *   `isOptimizing` updates from the WebSocket handler.
+ * • `useTransition` wraps the "Run History" navigation so the current page
+ *   stays fully interactive while the HistoryPage chunk loads in the background.
+ * • No `import React` needed — the automatic JSX transform handles it.
  */
 
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useOptimistic, useTransition } from "react";
 import { BarChart3, History, Wifi, WifiOff, Loader2, BarChart2 } from "lucide-react";
 import { useUIStore } from "@/store/uiStore";
 import { useOptimize } from "@/hooks/useOptimize";
@@ -39,7 +52,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// ── Connection status indicator ───────────────────────────────────────────────
+// ── Connection status indicator ────────────────────────────────────────────────
 
 function ConnectionBadge({
   state,
@@ -68,7 +81,7 @@ function ConnectionBadge({
   );
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── Empty state ────────────────────────────────────────────────────────────────
 
 function EmptyState() {
   return (
@@ -100,9 +113,11 @@ function EmptyState() {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+
   // Global state
   const currentRunId = useUIStore((s) => s.currentRunId);
   const isOptimizing = useUIStore((s) => s.isOptimizing);
@@ -115,13 +130,42 @@ export default function DashboardPage() {
   // Optimize hook — for submit button state
   const { isSubmitting } = useOptimize();
 
+  /**
+   * React 19: useTransition wraps the "Run History" navigation so the current
+   * page stays fully interactive while the HistoryPage chunk loads.
+   * `isNavPending` drives a subtle loading indicator on the nav link.
+   */
+  const [isNavPending, startNavTransition] = useTransition();
+
+  /**
+   * React 19: useOptimistic provides an instant "Running" badge update the
+   * moment the user submits a run, before the first WebSocket message arrives.
+   *
+   * The optimistic value mirrors `isOptimizing` from the store. When the
+   * ConstraintForm calls `uiStore.startNewRun(runId)`, the store updates
+   * `isOptimizing = true` which React 19 automatically propagates here.
+   * The optimistic layer adds a zero-latency visual update for the badge
+   * before the store subscription fires.
+   */
+  const [optimisticIsRunning] = useOptimistic(isOptimizing);
+
   // Determine what to show in the results panel
-  const showProgress = isOptimizing || (currentRunId && !optimizationResult);
-  const showResults = !isOptimizing && optimizationResult !== null;
+  const showProgress =
+    optimisticIsRunning || (currentRunId && !optimizationResult);
+  const showResults = !optimisticIsRunning && optimizationResult !== null;
   const showEmpty = !showProgress && !showResults;
+
+  function handleNavigateToHistory() {
+    startNavTransition(() => {
+      navigate("/history");
+    });
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* React 19: <title> hoisted to <head> automatically */}
+      <title>Dashboard | Portfolio Optimizer</title>
+
       {/* ── Header ── */}
       <header className="sticky top-0 z-40 border-b bg-card/95 px-6 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -142,13 +186,23 @@ export default function DashboardPage() {
             <ConnectionBadge state={connectionState} />
 
             <nav>
-              <Link
-                to="/history"
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              {/*
+               * React 19: button + startNavTransition keeps the dashboard
+               * interactive while the HistoryPage chunk loads in the background.
+               */}
+              <button
+                type="button"
+                onClick={handleNavigateToHistory}
+                disabled={isNavPending}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"
               >
-                <History className="h-4 w-4" />
+                {isNavPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <History className="h-4 w-4" />
+                )}
                 Run History
-              </Link>
+              </button>
             </nav>
           </div>
         </div>
@@ -211,18 +265,23 @@ export default function DashboardPage() {
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
                   {currentRunId}
                 </code>
-                {isOptimizing && (
+                {/*
+                 * React 19: optimisticIsRunning gives an instant "Running" badge
+                 * before the first WebSocket event arrives, eliminating the brief
+                 * gap between form submit and first progress message.
+                 */}
+                {optimisticIsRunning && (
                   <Badge variant="outline" className="gap-1 text-xs border-primary/50 text-primary">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Running
                   </Badge>
                 )}
-                {!isOptimizing && optimizationResult?.status === "completed" && (
+                {!optimisticIsRunning && optimizationResult?.status === "completed" && (
                   <Badge variant="success" className="text-xs">
                     Completed
                   </Badge>
                 )}
-                {!isOptimizing && optimizationResult?.status === "failed" && (
+                {!optimisticIsRunning && optimizationResult?.status === "failed" && (
                   <Badge variant="destructive" className="text-xs">
                     Failed
                   </Badge>

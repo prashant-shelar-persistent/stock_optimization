@@ -3,17 +3,17 @@
  * of the dashboard.
  *
  * Layout:
- *   ┌─────────────────────────────────────────────┐  ← fixed bottom-right
+ *   ┌─────────────────────────────────────────────────┐  ← fixed bottom-right
  *   │  [Bot] Portfolio Assistant          [×]     │  ← header
- *   ├─────────────────────────────────────────────┤
+ *   ├─────────────────────────────────────────────────┤
  *   │  ┌─────────────────────────────────────┐   │
  *   │  │  <ChatMessage role="assistant" …/>  │   │  ← scroll area
  *   │  │  <ChatMessage role="user" …/>       │   │
  *   │  │  <PayloadConfirmCard …/>            │   │
  *   │  └─────────────────────────────────────┘   │
- *   ├─────────────────────────────────────────────┤
+ *   ├─────────────────────────────────────────────────┤
  *   │  <ChatInput …/>                            │  ← footer
- *   └─────────────────────────────────────────────┘
+ *   └─────────────────────────────────────────────────┘
  *
  * The FAB (Floating Action Button) that toggles the panel is rendered
  * separately below the panel so it is always visible.
@@ -30,6 +30,10 @@
  *   - Focus is trapped inside the panel when open
  *   - The FAB has an aria-label and aria-expanded attribute
  *   - The close button has an aria-label
+ *
+ * React 19: Uses `import * as React` for consistent namespace access.
+ * No forwardRef needed — refs are plain props in React 19.
+ * useCallback and useEffect follow React 19 best practices.
  */
 
 import { useEffect, useRef, useCallback } from "react";
@@ -45,19 +49,25 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-// ── Welcome message ───────────────────────────────────────────────────────────
+// ── Welcome message ────────────────────────────────────────────────────────────
 
 const WELCOME_MESSAGE =
   "Hi! I'm your portfolio assistant. Tell me what you'd like to optimize — for example:\n\n" +
-  "\"Build a tech-heavy portfolio with AAPL, MSFT, NVDA and a $50,000 budget, " +
-  "targeting at least 12% annual return.\"\n\n" +
+  '"Build a tech-heavy portfolio with AAPL, MSFT, NVDA and a $50,000 budget, ' +
+  'targeting at least 12% annual return."\n\n' +
   "I'll ask follow-up questions if I need more details.";
 
-// ── ChatAssistant panel ───────────────────────────────────────────────────────
+// ── ChatAssistant panel ────────────────────────────────────────────────────────
 
-export function ChatAssistant() {
+/**
+ * ChatAssistant renders the floating chat panel and FAB toggle button.
+ *
+ * React 19: function component with no forwardRef — refs are plain props.
+ */
+function ChatAssistant() {
   const isPanelOpen = useChatStore((s) => s.isPanelOpen);
-  const messages = useChatStore((s) => s.messages);
+  // messages from store is kept for the scroll effect dependency
+  // (optimisticMessages is used for rendering)
   const sessionStatus = useChatStore((s) => s.sessionStatus);
   const pendingPayload = useChatStore((s) => s.pendingPayload);
   const isSending = useChatStore((s) => s.isSending);
@@ -69,7 +79,7 @@ export function ChatAssistant() {
   const closePanel = useChatStore((s) => s.closePanel);
   const clearError = useChatStore((s) => s.clearError);
 
-  const { sendMessage, confirmRun, resetSession } = useChatSession();
+  const { sendMessage, confirmRun, resetSession, optimisticMessages } = useChatSession();
 
   // Start tracking the confirmed run in the global UI store
   const startNewRun = useUIStore((s) => s.startNewRun);
@@ -79,7 +89,7 @@ export function ChatAssistant() {
 
   useEffect(() => {
     scrollEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isSending, pendingPayload]);
+  }, [optimisticMessages, isSending, pendingPayload]);
 
   // When a run is confirmed, hand off to the existing optimization pipeline
   useEffect(() => {
@@ -90,7 +100,7 @@ export function ChatAssistant() {
     }
   }, [confirmedRunId, startNewRun, closePanel]);
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleSend = useCallback(
     (content: string) => {
@@ -117,14 +127,14 @@ export function ChatAssistant() {
     if (error) clearError();
   }, [error, clearError]);
 
-  // ── Derived state ────────────────────────────────────────────────────────────
+  // ── Derived state ──────────────────────────────────────────────────────────
 
   const isSessionConfirmed = sessionStatus === "confirmed";
   const showConfirmCard =
     sessionStatus === "pending_confirmation" && pendingPayload != null;
   const inputDisabled = isSessionConfirmed;
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -203,15 +213,15 @@ export function ChatAssistant() {
             aria-relevant="additions"
           >
             {/* Welcome message (shown before any messages) */}
-            {messages.length === 0 && (
+            {optimisticMessages.length === 0 && (
               <ChatMessage
                 role="assistant"
                 content={WELCOME_MESSAGE}
               />
             )}
 
-            {/* Conversation messages */}
-            {messages.map((msg, idx) => (
+            {/* Conversation messages — uses optimisticMessages for instant feedback */}
+            {optimisticMessages.map((msg, idx) => (
               <ChatMessage
                 key={`${msg.role}-${idx}-${msg.timestamp ?? idx}`}
                 role={msg.role}
@@ -298,3 +308,6 @@ export function ChatAssistant() {
     </>
   );
 }
+ChatAssistant.displayName = "ChatAssistant";
+
+export { ChatAssistant };

@@ -8,10 +8,12 @@
  *   4. Rehydrate session state from the backend via `getChatSession`
  *   5. Reset the session (start a new conversation)
  *
- * Design principles:
+ * React 19 design principles:
+ *   - Uses `useTransition` for non-urgent state updates (message appending,
+ *     slot merging) so the input field stays responsive during API calls.
+ *   - Uses `useOptimistic` for the optimistic user-message append, giving
+ *     instant feedback while the network request is in flight.
  *   - All async logic lives here; chatStore only holds synchronous UI state.
- *   - Optimistic UI: the user's message is appended to the store immediately
- *     before the API call resolves, so the UI feels instant.
  *   - Error handling: API errors are caught, formatted, and stored in
  *     chatStore.error so the ChatAssistant panel can surface them.
  *     AbortError is silently swallowed — it is not a user-facing error.
@@ -27,9 +29,10 @@
  *   - confirmRun(overrides?) — confirm the pending payload; returns run_id
  *   - resetSession()         — abandon the current session and start fresh
  *   - rehydrate(sessionId)   — reload full session state from the backend
+ *   - isPending              — true while a React transition is in progress
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useOptimistic, useRef, useTransition } from "react";
 import {
   createChatSession,
   sendChatMessage,
@@ -37,7 +40,7 @@ import {
   getChatSession,
 } from "@/lib/api";
 import { useChatStore } from "@/store/chatStore";
-import type { ExtractedSlots } from "@/types/api";
+import type { ChatMessage, ExtractedSlots } from "@/types/api";
 
 // ── Return type ────────────────────────────────────────────────────────────────
 
@@ -81,15 +84,29 @@ export interface UseChatSessionReturn {
    * @returns True on success, false on failure.
    */
   rehydrate: (sessionId: string) => Promise<boolean>;
+
+  /**
+   * True while a React transition (non-urgent state update) is in progress.
+   * Can be used to show a subtle loading indicator without blocking the input.
+   */
+  isPending: boolean;
+
+  /**
+   * The optimistic message list — includes the user's latest message
+   * immediately (before the API responds). Use this in the UI instead of
+   * the store's `messages` array so the user sees instant feedback.
+   * Automatically rolls back if the API call fails.
+   */
+  optimisticMessages: ChatMessage[];
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
 export function useChatSession(): UseChatSessionReturn {
-  // Pull only the actions we need from the store (stable references)
+  // ── Store selectors (stable references) ──────────────────────────────────
+
   const setSessionId = useChatStore((s) => s.setSessionId);
   const setSessionStatus = useChatStore((s) => s.setSessionStatus);
-  const appendMessage = useChatStore((s) => s.appendMessage);
   const setMessages = useChatStore((s) => s.setMessages);
   const setExtractedSlots = useChatStore((s) => s.setExtractedSlots);
   const applyAssistantReply = useChatStore((s) => s.applyAssistantReply);
@@ -100,13 +117,35 @@ export function useChatSession(): UseChatSessionReturn {
   const setConfirmedRunId = useChatStore((s) => s.setConfirmedRunId);
   const resetSessionStore = useChatStore((s) => s.resetSession);
 
-  // Read current session ID without subscribing to re-renders on every change.
-  // We use getState() inside callbacks to always get the latest value.
+  // Read current messages for the optimistic hook (must be a stable selector)
+  const messages = useChatStore((s) => s.messages);
+
+  // ── React 19: useTransition for non-urgent state updates ─────────────────
+  // isPending is true while the transition's async work is scheduled but not
+  // yet committed. We expose it so the UI can show a subtle loading state.
+  const [isPending, startTransition] = useTransition();
+
+  // ── React 19: useOptimistic for instant user-message feedback ────────────
+  // optimisticMessages mirrors the store's messages array but with the
+  // user's latest message appended immediately (before the API responds).
+  // The optimistic value is automatically rolled back if the action throws.
+  const [optimisticMessages, addOptimisticMessage] = useOptimistic(
+    messages,
+    (current: ChatMessage[], newMessage: ChatMessage) => [
+      ...current,
+      newMessage,
+    ],
+  );
+
+  // ── Read current session ID without subscribing to re-renders ────────────
+  // We use getState() inside callbacks to always get the latest value without
+  // adding sessionId to every useCallback dependency array.
   const getSessionId = useCallback(
     () => useChatStore.getState().sessionId,
     [],
   );
 
+  // ── Abort controller ref ──────────────────────────────────────────────────
   // Track the latest in-flight AbortController so we can cancel it on unmount.
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -134,74 +173,87 @@ export function useChatSession(): UseChatSessionReturn {
       setError(null);
       setIsSending(true);
 
-      // Optimistically append the user message with a client-side timestamp
-      const userTimestamp = new Date().toISOString();
-      appendMessage({ role: "user", content: trimmed, timestamp: userTimestamp });
+      // Build the optimistic user message with a stable client-side ID
+      const userMessage: ChatMessage = {
+        role: "user",
+        content: trimmed,
+        timestamp: new Date().toISOString(),
+        id: crypto.randomUUID(),
+      };
 
-      try {
-        // Resolve or create the session ID
-        let sessionId = getSessionId();
+      // React 19: wrap non-urgent state updates in a transition so the input
+      // field stays responsive. The optimistic append happens synchronously
+      // inside the transition callback.
+      let replyContent: string | null = null;
 
-        if (!sessionId) {
-          // First message — create a new session seeded with this message
-          const session = await createChatSession(
-            { initial_message: trimmed },
-            signal,
-          );
+      await new Promise<void>((resolve) => {
+        startTransition(async () => {
+          // Optimistically append the user message for instant UI feedback
+          addOptimisticMessage(userMessage);
 
-          // Record the session ID (this also resets conversation state)
-          setSessionId(session.session_id);
-          sessionId = session.session_id;
+          try {
+            // Resolve or create the session ID
+            let sessionId = getSessionId();
 
-          // The backend already processed the initial message and returned
-          // the full session including the assistant's first reply.
-          // Reconstruct the message list from the session response.
-          setMessages(session.messages);
-          setExtractedSlots(session.extracted_slots);
-          setSessionStatus(session.status);
+            if (!sessionId) {
+              // First message — create a new session seeded with this message
+              const session = await createChatSession(
+                { initial_message: trimmed },
+                signal,
+              );
 
-          if (session.status === "pending_confirmation") {
-            setPendingPayload(session.extracted_slots);
+              // Record the session ID (this also resets conversation state)
+              setSessionId(session.session_id);
+              sessionId = session.session_id;
+
+              // The backend already processed the initial message and returned
+              // the full session including the assistant's first reply.
+              // Reconstruct the message list from the session response.
+              setMessages(session.messages);
+              setExtractedSlots(session.extracted_slots);
+              setSessionStatus(session.status);
+
+              if (session.status === "pending_confirmation") {
+                setPendingPayload(session.extracted_slots);
+              }
+
+              // The assistant reply is the last message in the session
+              const lastMsg = session.messages[session.messages.length - 1];
+              replyContent =
+                lastMsg?.role === "assistant" ? lastMsg.content : "";
+            } else {
+              // Subsequent message — send to the existing session
+              const response = await sendChatMessage(sessionId, trimmed, signal);
+
+              // Apply the assistant reply atomically to the store
+              applyAssistantReply({
+                content: response.reply,
+                extractedSlots: response.session.extracted_slots ?? null,
+                payloadPreview: response.payload_preview,
+                status: response.session.status,
+                timestamp: new Date().toISOString(),
+              });
+
+              replyContent = response.reply;
+            }
+          } catch (err) {
+            // Silently swallow AbortError — it is not a user-facing error
+            if (!(err instanceof DOMException && err.name === "AbortError")) {
+              const message =
+                err instanceof Error ? err.message : "Failed to send message";
+              setError(message);
+            }
+          } finally {
+            setIsSending(false);
+            resolve();
           }
-
-          // The assistant reply is the last message in the session
-          const lastMsg = session.messages[session.messages.length - 1];
-          const replyContent =
-            lastMsg?.role === "assistant" ? lastMsg.content : "";
-
-          setIsSending(false);
-          return replyContent;
-        }
-
-        // Subsequent message — send to the existing session
-        const response = await sendChatMessage(sessionId, trimmed, signal);
-
-        // Apply the assistant reply atomically to the store
-        applyAssistantReply({
-          content: response.reply,
-          extractedSlots: response.session.extracted_slots ?? null,
-          payloadPreview: response.payload_preview,
-          status: response.session.status,
-          timestamp: new Date().toISOString(),
         });
+      });
 
-        setIsSending(false);
-        return response.reply;
-      } catch (err) {
-        // Silently swallow AbortError — it is not a user-facing error
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setIsSending(false);
-          return null;
-        }
-        const message =
-          err instanceof Error ? err.message : "Failed to send message";
-        setError(message);
-        setIsSending(false);
-        return null;
-      }
+      return replyContent;
     },
     [
-      appendMessage,
+      addOptimisticMessage,
       applyAssistantReply,
       getSessionId,
       setError,
@@ -321,5 +373,5 @@ export function useChatSession(): UseChatSessionReturn {
     ],
   );
 
-  return { sendMessage, confirmRun, resetSession, rehydrate };
+  return { sendMessage, confirmRun, resetSession, rehydrate, isPending, optimisticMessages };
 }

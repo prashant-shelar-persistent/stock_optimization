@@ -20,6 +20,8 @@
  *   colorScheme — "classical" | "quantum" — controls the color palette
  *                 (default: "classical")
  *
+ * React 19: uses named imports — no `import * as React` needed.
+ *
  * Usage:
  *   <AllocationChart
  *     weights={classicalResult.weights}
@@ -39,7 +41,7 @@ import {
 import type { AssetWeight } from "@/types/api";
 import { formatPercent, formatCurrency } from "@/lib/utils";
 
-// ── Color palettes ────────────────────────────────────────────────────────────
+// ── Color palettes ─────────────────────────────────────────────────────────────
 
 /** Blue-dominant palette for classical optimization results. */
 const CLASSICAL_COLORS = [
@@ -69,7 +71,7 @@ const QUANTUM_COLORS = [
   "#d946ef", // fuchsia-500
 ];
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface AllocationChartProps {
   weights: AssetWeight[];
@@ -90,7 +92,7 @@ interface PieSlice {
   sector?: string;
 }
 
-// ── Custom tooltip ────────────────────────────────────────────────────────────
+// ── Custom tooltip ─────────────────────────────────────────────────────────────
 
 interface TooltipPayloadEntry {
   name: string;
@@ -128,7 +130,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   );
 }
 
-// ── Custom legend ─────────────────────────────────────────────────────────────
+// ── Custom legend ──────────────────────────────────────────────────────────────
 
 interface LegendPayloadEntry {
   value: string;
@@ -164,7 +166,7 @@ function CustomLegend({ payload }: CustomLegendProps) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
 /**
  * AllocationChart renders a donut pie chart of portfolio asset weights.

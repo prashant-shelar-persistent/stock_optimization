@@ -27,6 +27,9 @@
  *   - children  — the bubble content (text, badges, etc.)
  *   - className — optional extra Tailwind classes for the outer element
  *
+ * React 19: Uses `import * as React` for consistent namespace access.
+ * No forwardRef needed — refs are plain props in React 19.
+ *
  * @example
  * // Basic usage inside ChatMessage
  * <ChatBubble role="user">Hello, build me a portfolio!</ChatBubble>
@@ -40,11 +43,11 @@
  * <ChatBubble variant="system">Session reset — starting a new conversation.</ChatBubble>
  */
 
-import type { ReactNode } from "react";
+import * as React from "react";
 import { cn } from "@/lib/utils";
 import type { ChatRole } from "@/types/api";
 
-// ── Typing indicator ─────────────────────────────────────────────────────────
+// ── Typing indicator ───────────────────────────────────────────────────────────
 
 /**
  * Three animated dots that indicate the assistant is composing a reply.
@@ -68,8 +71,9 @@ function TypingDots() {
     </span>
   );
 }
+TypingDots.displayName = "TypingDots";
 
-// ── Variant definitions ───────────────────────────────────────────────────────
+// ── Variant definitions ────────────────────────────────────────────────────────
 
 /**
  * Visual variant for the bubble.
@@ -80,7 +84,7 @@ function TypingDots() {
  */
 export type ChatBubbleVariant = ChatRole | "system";
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 export interface ChatBubbleProps {
   /**
@@ -107,7 +111,7 @@ export interface ChatBubbleProps {
    * The bubble content.  Newlines in plain text are preserved via
    * `whitespace-pre-wrap`.  Pass any React node for richer content.
    */
-  children?: ReactNode;
+  children?: React.ReactNode;
 
   /**
    * Optional extra Tailwind classes applied to the outermost element.
@@ -116,15 +120,17 @@ export interface ChatBubbleProps {
   className?: string;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 
 /**
  * ChatBubble renders the styled message bubble primitive.
  *
  * It is intentionally stateless and purely presentational — all interaction
  * logic lives in the parent `ChatMessage` or `ChatAssistant` components.
+ *
+ * React 19: function component with no forwardRef — refs are plain props.
  */
-export function ChatBubble({
+function ChatBubble({
   role = "assistant",
   variant,
   isLoading = false,
@@ -179,3 +185,6 @@ export function ChatBubble({
     </div>
   );
 }
+ChatBubble.displayName = "ChatBubble";
+
+export { ChatBubble };

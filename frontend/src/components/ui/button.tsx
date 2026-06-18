@@ -1,8 +1,10 @@
 /**
  * Button component — shadcn/ui implementation using Radix UI Slot.
  *
- * Variants: default | destructive | outline | secondary | ghost | link
+ * Variants: default | destructive | outline | secondary | ghost | link | quantum | classical
  * Sizes:    default | sm | lg | icon
+ *
+ * React 19: ref is passed as a plain prop — no forwardRef wrapper needed.
  */
 
 import * as React from "react";
@@ -47,7 +49,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends React.ComponentProps<"button">,
     VariantProps<typeof buttonVariants> {
   /**
    * When true, the button renders as its child element (using Radix Slot).
@@ -56,18 +58,21 @@ export interface ButtonProps
   asChild?: boolean;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
-    return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        {...props}
-      />
-    );
-  },
-);
+function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  ...props
+}: ButtonProps) {
+  const Comp = asChild ? Slot : "button";
+  return (
+    <Comp
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
+}
 Button.displayName = "Button";
 
 // eslint-disable-next-line react-refresh/only-export-components

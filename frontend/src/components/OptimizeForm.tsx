@@ -26,9 +26,18 @@
  *
  * The component is intentionally self-contained — it reads all state from
  * uiStore and manages its own run_id lifecycle. No props are required.
+ *
+ * React 19 notes
+ * ──────────────
+ * • Named imports from "react" (no namespace import).
+ * • No React.FC, no React.forwardRef — plain function declaration.
+ * • useTransition wraps the run-start state update so the results panel
+ *   transitions concurrently without blocking the ConstraintForm submit button.
+ * • isPending prevents a flash of the empty state between submit and the first
+ *   WebSocket frame arriving.
  */
 
-import * as React from "react";
+import { useState, useCallback, useTransition } from "react";
 import { BarChart3, Wifi, WifiOff, Loader2 } from "lucide-react";
 
 import { ConstraintForm } from "@/components/ConstraintForm";
@@ -122,7 +131,17 @@ export function OptimizeForm({ className }: OptimizeFormProps) {
    * Passed to useWebSocket so it can open the correct progress socket.
    * Set to null when no run has been started yet.
    */
-  const [currentRunId, setCurrentRunId] = React.useState<string | null>(null);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+
+  /**
+   * React 19: useTransition marks the run-start state update as non-urgent.
+   * This keeps the ConstraintForm submit button interactive while React
+   * concurrently schedules the results-panel transition (switching from the
+   * empty state to the progress panel). `isPending` is used to show a
+   * transitional loading state in the results panel while React schedules
+   * the concurrent update.
+   */
+  const [isPending, startTransition] = useTransition();
 
   // ── Global UI state ──────────────────────────────────────────────────────
 
@@ -144,15 +163,32 @@ export function OptimizeForm({ className }: OptimizeFormProps) {
   /**
    * Called by ConstraintForm when a new optimization run is successfully
    * submitted. Stores the run_id so useWebSocket can open the socket.
+   *
+   * React 19: wrapped in startTransition so the results-panel state switch
+   * (empty → progress) is treated as a non-urgent concurrent update. The
+   * ConstraintForm remains fully interactive while React schedules the
+   * transition, preventing the submit button from feeling "frozen" during
+   * the initial render of AgentProgressPanel.
    */
-  const handleRunStarted = React.useCallback((runId: string) => {
-    setCurrentRunId(runId);
-  }, []);
+  const handleRunStarted = useCallback(
+    (runId: string) => {
+      startTransition(() => {
+        setCurrentRunId(runId);
+      });
+    },
+    [startTransition],
+  );
 
   // ── Derived display flags ────────────────────────────────────────────────
 
-  /** True while a run is in progress (WebSocket open, no result yet). */
-  const showProgress = isOptimizing || connectionState === "connecting";
+  /**
+   * True while a run is in progress (WebSocket open, no result yet) OR while
+   * React 19 is concurrently scheduling the transition to the progress panel
+   * (isPending). This prevents a flash of the empty state between the moment
+   * the user submits and the moment currentRunId is committed.
+   */
+  const showProgress =
+    isPending || isOptimizing || connectionState === "connecting";
 
   /** True once a completed result is available. */
   const showResults = !isOptimizing && optimizationResult !== null;

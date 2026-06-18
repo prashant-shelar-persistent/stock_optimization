@@ -11,6 +11,9 @@
  *   classical — PortfolioMetrics from the classical optimization
  *   qaoa      — optional PortfolioMetrics from QAOA
  *   vqe       — optional PortfolioMetrics from VQE
+ *
+ * React 19.2: Uses function components with typed props (no forwardRef needed).
+ * JSX transform is handled automatically via react-jsx in tsconfig.
  */
 
 import {
@@ -22,7 +25,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
+  type TooltipProps,
 } from "recharts";
 import type { PortfolioMetrics } from "@/types/api";
 import { formatPercent, formatNumber } from "@/lib/utils";
@@ -50,22 +53,17 @@ interface MetricDataPoint {
   isPercent: boolean;
 }
 
-interface TooltipPayloadEntry {
-  name: string;
-  value: number;
-  color: string;
-  dataKey: string;
-}
-
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
-  label?: string;
-}
-
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+/**
+ * Custom tooltip rendered by Recharts on hover.
+ * Typed using Recharts' TooltipProps with our MetricDataPoint payload shape.
+ */
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: TooltipProps<number, string>) {
   if (!active || !payload || payload.length === 0) return null;
 
   // Determine if this metric is a percentage
@@ -83,8 +81,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
           <span className="text-muted-foreground">{entry.name}:</span>
           <span className="font-medium">
             {isPercent
-              ? formatPercent(entry.value / 100)
-              : formatNumber(entry.value, 3)}
+              ? formatPercent((entry.value as number) / 100)
+              : formatNumber(entry.value as number, 3)}
           </span>
         </div>
       ))}
@@ -179,6 +177,3 @@ export function MetricsComparisonBar({
     </ResponsiveContainer>
   );
 }
-
-// ── Suppress unused Cell import warning (used for future per-bar coloring) ───
-void Cell;

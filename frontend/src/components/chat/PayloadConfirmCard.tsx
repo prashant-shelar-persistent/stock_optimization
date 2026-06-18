@@ -6,26 +6,30 @@
  * `pendingPayload` is non-null.
  *
  * Layout:
- *   ┌─────────────────────────────────────────────┐
+ *   ┌─────────────────────────────────────────────────┐
  *   │  ✓ Ready to optimize                        │
  *   │  Review the parameters below, then confirm. │
- *   ├─────────────────────────────────────────────┤
+ *   ├─────────────────────────────────────────────────┤
  *   │  Tickers    AAPL · MSFT · GOOGL             │
  *   │  Budget     $100,000                        │
  *   │  Min Return 8%                              │
  *   │  Max Vol    15%                             │
  *   │  …                                          │
- *   ├─────────────────────────────────────────────┤
+ *   ├─────────────────────────────────────────────────┤
  *   │  [Cancel]              [Confirm & Run →]    │
- *   └─────────────────────────────────────────────┘
+ *   └─────────────────────────────────────────────────┘
  *
  * Props:
  *   - payload       — the ExtractedSlots to display
  *   - isConfirming  — true while the confirm API call is in-flight
  *   - onConfirm()   — called when the user clicks "Confirm & Run"
  *   - onCancel()    — called when the user clicks "Cancel"
+ *
+ * React 19: Uses `import * as React` for consistent namespace access.
+ * No forwardRef needed — refs are plain props in React 19.
  */
 
+import * as React from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import type { ExtractedSlots } from "@/types/api";
 
-// ── Helper: row renderer ──────────────────────────────────────────────────────
+// ── Helper: row renderer ───────────────────────────────────────────────────────
 
 interface RowProps {
   label: string;
@@ -51,8 +55,9 @@ function Row({ label, value }: RowProps) {
     </div>
   );
 }
+Row.displayName = "Row";
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 export interface PayloadConfirmCardProps {
   /** The extracted optimization parameters to display. */
@@ -67,9 +72,14 @@ export interface PayloadConfirmCardProps {
   className?: string;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 
-export function PayloadConfirmCard({
+/**
+ * PayloadConfirmCard renders the extracted optimization parameters for review.
+ *
+ * React 19: function component with no forwardRef — refs are plain props.
+ */
+function PayloadConfirmCard({
   payload,
   isConfirming,
   onConfirm,
@@ -273,3 +283,6 @@ export function PayloadConfirmCard({
     </div>
   );
 }
+PayloadConfirmCard.displayName = "PayloadConfirmCard";
+
+export { PayloadConfirmCard };

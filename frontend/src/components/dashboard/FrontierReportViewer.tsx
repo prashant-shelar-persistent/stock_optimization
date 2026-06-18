@@ -8,8 +8,13 @@
  *   - Knee portfolio allocation table
  *   - LLM commentary (if present)
  *
- * Uses Chart.js via react-chartjs-2 if available, otherwise falls back to
- * a pure-CSS/SVG scatter plot so the component works without extra deps.
+ * Uses a pure SVG scatter plot — no external chart library required.
+ *
+ * React 19 migration notes:
+ *   - No forwardRef — refs are plain props in React 19
+ *   - Removed React namespace prefix where not needed
+ *   - Type-only imports use `import type`
+ *   - useMemo dependencies are explicit and minimal
  */
 
 import { useMemo } from "react";
@@ -25,8 +30,6 @@ import { Separator } from "@/components/ui/separator";
 import {
   TrendingUp,
   Star,
-  // Zap,
-  // Shield,
   Clock,
   MessageSquare,
 } from "lucide-react";
@@ -47,7 +50,11 @@ function measureLabel(m: string): string {
 }
 
 function fmtVal(v: number, measure: string): string {
-  if (measure === "return" || measure === "volatility" || measure === "sector_concentration") {
+  if (
+    measure === "return" ||
+    measure === "volatility" ||
+    measure === "sector_concentration"
+  ) {
     return `${(v * 100).toFixed(2)}%`;
   }
   if (measure === "sharpe") return v.toFixed(3);
@@ -104,7 +111,17 @@ function ScatterChart({
     return Array.from({ length: n }, (_, i) => yMin + (yRange * i) / (n - 1));
   }, [yMin, yRange]);
 
-  // const specialIndices = new Set([kneeIdx, maxSharpeIdx, minRiskIdx].filter((i) => i != null));
+  // Pre-compute dominant points path for the frontier line
+  const frontierPath = useMemo(() => {
+    const dominant = points
+      .filter((p) => p.is_dominant)
+      .sort((a, b) => a.x - b.x);
+    if (dominant.length < 2) return null;
+    return dominant
+      .map((p, i) => `${i === 0 ? "M" : "L"}${toSvgX(p.x)},${toSvgY(p.y)}`)
+      .join(" ");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, xMin, xRange, yMin, yRange]);
 
   return (
     <div className="w-full overflow-x-auto">
@@ -112,11 +129,12 @@ function ScatterChart({
         viewBox={`0 0 ${W} ${H}`}
         className="w-full max-w-[480px] mx-auto"
         aria-label={`Efficient frontier: ${measureLabel(xMeasure)} vs ${measureLabel(yMeasure)}`}
+        role="img"
       >
         {/* Grid lines */}
         {yTicks.map((t, i) => (
           <line
-            key={i}
+            key={`ygrid-${i}`}
             x1={PAD.left}
             x2={W - PAD.right}
             y1={toSvgY(t)}
@@ -124,11 +142,12 @@ function ScatterChart({
             stroke="currentColor"
             strokeOpacity={0.08}
             strokeWidth={1}
+            aria-hidden="true"
           />
         ))}
         {xTicks.map((t, i) => (
           <line
-            key={i}
+            key={`xgrid-${i}`}
             x1={toSvgX(t)}
             x2={toSvgX(t)}
             y1={PAD.top}
@@ -136,28 +155,21 @@ function ScatterChart({
             stroke="currentColor"
             strokeOpacity={0.08}
             strokeWidth={1}
+            aria-hidden="true"
           />
         ))}
 
         {/* Frontier line (dominant points only, sorted by x) */}
-        {(() => {
-          const dominant = points
-            .filter((p) => p.is_dominant)
-            .sort((a, b) => a.x - b.x);
-          if (dominant.length < 2) return null;
-          const d = dominant
-            .map((p, i) => `${i === 0 ? "M" : "L"}${toSvgX(p.x)},${toSvgY(p.y)}`)
-            .join(" ");
-          return (
-            <path
-              d={d}
-              fill="none"
-              stroke="hsl(var(--primary))"
-              strokeWidth={2}
-              strokeOpacity={0.6}
-            />
-          );
-        })()}
+        {frontierPath && (
+          <path
+            d={frontierPath}
+            fill="none"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2}
+            strokeOpacity={0.6}
+            aria-label="Efficient frontier curve"
+          />
+        )}
 
         {/* All points */}
         {points.map((p, i) => {
@@ -166,19 +178,25 @@ function ScatterChart({
           const isKnee = i === kneeIdx;
           const isMaxSharpe = i === maxSharpeIdx;
           const isMinRisk = i === minRiskIdx;
-          // const isSpecial = isKnee || isMaxSharpe || isMinRisk;
 
           if (isKnee) {
             // Star shape for knee
             return (
-              <g key={i}>
-                <circle cx={cx} cy={cy} r={10} fill="hsl(var(--primary))" fillOpacity={0.15} />
+              <g key={`pt-${i}`} aria-label={`Knee point: ${fmtVal(p.x, xMeasure)}, ${fmtVal(p.y, yMeasure)}`}>
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={10}
+                  fill="hsl(var(--primary))"
+                  fillOpacity={0.15}
+                />
                 <text
                   x={cx}
                   y={cy + 5}
                   textAnchor="middle"
                   fontSize={12}
                   fill="hsl(var(--primary))"
+                  aria-hidden="true"
                 >
                   ★
                 </text>
@@ -187,16 +205,28 @@ function ScatterChart({
           }
           if (isMaxSharpe) {
             return (
-              <g key={i}>
-                <circle cx={cx} cy={cy} r={8} fill="hsl(142 76% 36%)" fillOpacity={0.2} />
+              <g key={`pt-${i}`} aria-label={`Max Sharpe point: ${fmtVal(p.x, xMeasure)}, ${fmtVal(p.y, yMeasure)}`}>
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={8}
+                  fill="hsl(142 76% 36%)"
+                  fillOpacity={0.2}
+                />
                 <circle cx={cx} cy={cy} r={4} fill="hsl(142 76% 36%)" />
               </g>
             );
           }
           if (isMinRisk) {
             return (
-              <g key={i}>
-                <circle cx={cx} cy={cy} r={8} fill="hsl(217 91% 60%)" fillOpacity={0.2} />
+              <g key={`pt-${i}`} aria-label={`Min risk point: ${fmtVal(p.x, xMeasure)}, ${fmtVal(p.y, yMeasure)}`}>
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={8}
+                  fill="hsl(217 91% 60%)"
+                  fillOpacity={0.2}
+                />
                 <circle cx={cx} cy={cy} r={4} fill="hsl(217 91% 60%)" />
               </g>
             );
@@ -204,19 +234,24 @@ function ScatterChart({
 
           return (
             <circle
-              key={i}
+              key={`pt-${i}`}
               cx={cx}
               cy={cy}
               r={p.is_dominant ? 4 : 3}
-              fill={p.is_dominant ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))"}
+              fill={
+                p.is_dominant
+                  ? "hsl(var(--primary))"
+                  : "hsl(var(--muted-foreground))"
+              }
               fillOpacity={p.is_dominant ? 0.8 : 0.35}
+              aria-hidden="true"
             />
           );
         })}
 
         {/* X axis ticks + labels */}
         {xTicks.map((t, i) => (
-          <g key={i}>
+          <g key={`xtick-${i}`} aria-hidden="true">
             <line
               x1={toSvgX(t)}
               x2={toSvgX(t)}
@@ -240,7 +275,7 @@ function ScatterChart({
 
         {/* Y axis ticks + labels */}
         {yTicks.map((t, i) => (
-          <g key={i}>
+          <g key={`ytick-${i}`} aria-hidden="true">
             <line
               x1={PAD.left - 4}
               x2={PAD.left}
@@ -270,6 +305,7 @@ function ScatterChart({
           fontSize={10}
           fill="currentColor"
           fillOpacity={0.7}
+          aria-hidden="true"
         >
           {measureLabel(xMeasure)}
         </text>
@@ -281,30 +317,47 @@ function ScatterChart({
           fill="currentColor"
           fillOpacity={0.7}
           transform={`rotate(-90, 12, ${(PAD.top + H - PAD.bottom) / 2})`}
+          aria-hidden="true"
         >
           {measureLabel(yMeasure)}
         </text>
       </svg>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center justify-center gap-4 mt-2 text-xs text-muted-foreground">
+      <div
+        className="flex flex-wrap items-center justify-center gap-4 mt-2 text-xs text-muted-foreground"
+        aria-label="Chart legend"
+      >
         <span className="flex items-center gap-1">
-          <span className="text-primary text-sm">★</span> Knee (recommended)
+          <span className="text-primary text-sm" aria-hidden="true">★</span>
+          Knee (recommended)
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-emerald-500 opacity-80" />
+          <span
+            className="inline-block w-3 h-3 rounded-full bg-emerald-500 opacity-80"
+            aria-hidden="true"
+          />
           Max Sharpe
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-blue-500 opacity-80" />
+          <span
+            className="inline-block w-3 h-3 rounded-full bg-blue-500 opacity-80"
+            aria-hidden="true"
+          />
           Min Risk
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-primary opacity-80" />
+          <span
+            className="inline-block w-3 h-3 rounded-full bg-primary opacity-80"
+            aria-hidden="true"
+          />
           Dominant
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-muted-foreground opacity-40" />
+          <span
+            className="inline-block w-3 h-3 rounded-full bg-muted-foreground opacity-40"
+            aria-hidden="true"
+          />
           Dominated
         </span>
       </div>
@@ -314,7 +367,11 @@ function ScatterChart({
 
 // ── Knee portfolio allocation table ──────────────────────────────────────────
 
-function KneePortfolioTable({ point, xMeasure, yMeasure }: {
+function KneePortfolioTable({
+  point,
+  xMeasure,
+  yMeasure,
+}: {
   point: FrontierPoint;
   xMeasure: string;
   yMeasure: string;
@@ -325,24 +382,30 @@ function KneePortfolioTable({ point, xMeasure, yMeasure }: {
       <div className="grid grid-cols-3 gap-3 text-center">
         <div className="rounded-md bg-muted/40 p-2">
           <p className="text-xs text-muted-foreground">{measureLabel(xMeasure)}</p>
-          <p className="text-sm font-semibold tabular-nums">{fmtVal(point.x, xMeasure)}</p>
+          <p className="text-sm font-semibold tabular-nums">
+            {fmtVal(point.x, xMeasure)}
+          </p>
         </div>
         <div className="rounded-md bg-muted/40 p-2">
           <p className="text-xs text-muted-foreground">{measureLabel(yMeasure)}</p>
-          <p className="text-sm font-semibold tabular-nums">{fmtVal(point.y, yMeasure)}</p>
+          <p className="text-sm font-semibold tabular-nums">
+            {fmtVal(point.y, yMeasure)}
+          </p>
         </div>
         <div className="rounded-md bg-muted/40 p-2">
           <p className="text-xs text-muted-foreground">Sharpe</p>
-          <p className="text-sm font-semibold tabular-nums">{point.sharpe.toFixed(3)}</p>
+          <p className="text-sm font-semibold tabular-nums">
+            {point.sharpe.toFixed(3)}
+          </p>
         </div>
       </div>
 
-      <table className="w-full text-xs">
+      <table className="w-full text-xs" aria-label="Knee portfolio asset weights">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="py-1 text-left font-medium">Ticker</th>
-            <th className="py-1 text-right font-medium">Weight</th>
-            <th className="py-1 text-right font-medium">Allocation</th>
+            <th className="py-1 text-left font-medium" scope="col">Ticker</th>
+            <th className="py-1 text-right font-medium" scope="col">Weight</th>
+            <th className="py-1 text-right font-medium" scope="col">Allocation</th>
           </tr>
         </thead>
         <tbody>
@@ -371,13 +434,15 @@ interface FrontierReportViewerProps {
 
 export function FrontierReportViewer({ report }: FrontierReportViewerProps) {
   const kneePoint =
-    report.knee_point_index != null ? report.points[report.knee_point_index] : null;
+    report.knee_point_index != null
+      ? report.points[report.knee_point_index]
+      : null;
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-emerald-500" />
+          <TrendingUp className="h-5 w-5 text-emerald-500" aria-hidden="true" />
           <CardTitle className="text-base">Efficient Frontier</CardTitle>
         </div>
         <CardDescription>
@@ -400,21 +465,28 @@ export function FrontierReportViewer({ report }: FrontierReportViewerProps) {
         <Separator />
 
         {/* Summary stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center"
+          aria-label="Frontier summary statistics"
+        >
           <div className="rounded-md bg-muted/40 p-2">
             <p className="text-xs text-muted-foreground">Total Points</p>
             <p className="text-sm font-semibold">{report.points.length}</p>
           </div>
           <div className="rounded-md bg-muted/40 p-2">
             <p className="text-xs text-muted-foreground">Dominant</p>
-            <p className="text-sm font-semibold text-emerald-600">{report.num_dominant}</p>
+            <p className="text-sm font-semibold text-emerald-600">
+              {report.num_dominant}
+            </p>
           </div>
           <div className="rounded-md bg-muted/40 p-2">
             <p className="text-xs text-muted-foreground">Dominated</p>
-            <p className="text-sm font-semibold text-muted-foreground">{report.num_dominated}</p>
+            <p className="text-sm font-semibold text-muted-foreground">
+              {report.num_dominated}
+            </p>
           </div>
           <div className="rounded-md bg-muted/40 p-2 flex items-center justify-center gap-1">
-            <Clock className="h-3 w-3 text-muted-foreground" />
+            <Clock className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
             <p className="text-sm font-semibold tabular-nums">
               {(report.solve_time_ms / 1000).toFixed(1)}s
             </p>
@@ -427,8 +499,10 @@ export function FrontierReportViewer({ report }: FrontierReportViewerProps) {
             <Separator />
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Star className="h-4 w-4 text-primary" />
-                <h4 className="text-sm font-semibold">Recommended Portfolio (Knee Point)</h4>
+                <Star className="h-4 w-4 text-primary" aria-hidden="true" />
+                <h4 className="text-sm font-semibold">
+                  Recommended Portfolio (Knee Point)
+                </h4>
                 <Badge variant="outline" className="text-xs">
                   {report.x_direction === "minimize" ? "Low Risk" : "High Return"}
                 </Badge>
@@ -448,7 +522,7 @@ export function FrontierReportViewer({ report }: FrontierReportViewerProps) {
             <Separator />
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                <MessageSquare className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <h4 className="text-sm font-semibold">AI Commentary</h4>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">

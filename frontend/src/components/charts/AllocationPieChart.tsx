@@ -12,6 +12,9 @@
  *   budget   — total portfolio budget in USD (used to compute dollar amounts)
  *   title    — optional chart title
  *   colorSet — "classical" | "quantum" — controls the color palette
+ *
+ * React 19.2: Uses function components with typed props (no forwardRef needed).
+ * JSX transform is handled automatically via react-jsx in tsconfig.
  */
 
 import {
@@ -21,6 +24,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  type TooltipProps,
 } from "recharts";
 import type { AssetWeight } from "@/types/api";
 import { formatPercent, formatCurrency } from "@/lib/utils";
@@ -62,25 +66,28 @@ interface AllocationPieChartProps {
   colorSet?: "classical" | "quantum";
 }
 
-interface TooltipPayloadEntry {
+/** Shape of each data point fed to Recharts Pie. */
+interface PieDataPoint {
+  ticker: string;
+  weight: number;
+  allocation: number;
+  sector?: string;
+  /** Recharts uses "name" for the legend label */
   name: string;
+  /** Recharts uses "value" as the numeric slice size */
   value: number;
-  payload: {
-    ticker: string;
-    weight: number;
-    allocation: number;
-    sector?: string;
-  };
-}
-
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
 }
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function CustomTooltip({ active, payload }: CustomTooltipProps) {
+/**
+ * Custom tooltip rendered by Recharts on hover.
+ * Typed using Recharts' TooltipProps with our PieDataPoint payload shape.
+ */
+function CustomTooltip({
+  active,
+  payload,
+}: TooltipProps<number, string> & { payload?: Array<{ payload: PieDataPoint }> }) {
   if (!active || !payload || payload.length === 0) return null;
 
   const entry = payload[0];
@@ -153,7 +160,7 @@ export function AllocationPieChart({
   const colors = colorSet === "quantum" ? QUANTUM_COLORS : CLASSICAL_COLORS;
 
   // Filter out zero-weight assets and sort by weight descending
-  const chartData = weights
+  const chartData: PieDataPoint[] = weights
     .filter((w) => w.weight > 0.001)
     .sort((a, b) => b.weight - a.weight)
     .map((w) => ({

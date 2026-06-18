@@ -1,0 +1,322 @@
+{
+  "migration": {
+    "from": "React 18",
+    "to": "React 19.2",
+    "type": "in-place",
+    "project": "stock_optimization / Portfolio Optimizer"
+  },
+  "summary": {
+    "components_done": 32,
+    "components_in_progress": 0,
+    "components_planned": 0
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "status": "done",
+      "description": "Initial migration — core UI primitives and entry points",
+      "components": [
+        "frontend/src/components/ui/button.tsx",
+        "frontend/src/components/ui/input.tsx"
+      ]
+    },
+    {
+      "round": 2,
+      "status": "done",
+      "description": "Full component migration — all remaining components migrated to React 19.2",
+      "components": [
+        "frontend/src/components/ui/tabs.tsx",
+        "frontend/src/components/ui/card.tsx",
+        "frontend/src/components/ui/slider.tsx",
+        "frontend/src/components/ui/progress.tsx",
+        "frontend/src/components/ui/toaster.tsx",
+        "frontend/src/components/ui/scroll-area.tsx",
+        "frontend/src/components/ui/label.tsx",
+        "frontend/src/components/ui/tooltip.tsx",
+        "frontend/src/components/ui/alert.tsx",
+        "frontend/src/components/ui/switch.tsx",
+        "frontend/src/components/ui/dialog.tsx",
+        "frontend/src/components/ui/badge.tsx",
+        "frontend/src/components/ui/table.tsx",
+        "frontend/src/components/ui/separator.tsx",
+        "frontend/src/components/ui/toast.tsx",
+        "frontend/src/components/ui/dropdown-menu.tsx",
+        "frontend/src/components/ui/select.tsx",
+        "frontend/src/components/ui/textarea.tsx",
+        "frontend/src/components/ui/skeleton.tsx",
+        "frontend/src/components/MetricsChart.tsx",
+        "frontend/src/components/OptimizeForm.tsx",
+        "frontend/src/components/AgentProgressPanel.tsx",
+        "frontend/src/components/AssetSearchCombobox.tsx",
+        "frontend/src/components/AllocationChart.tsx",
+        "frontend/src/components/ComparisonDashboard.tsx",
+        "frontend/src/components/SectorConstraintRow.tsx",
+        "frontend/src/components/ConstraintForm.tsx",
+        "frontend/src/components/RunHistory.tsx",
+        "frontend/src/components/TickerBadge.tsx",
+        "frontend/src/components/chat/ChatAssistant.tsx"
+      ]
+    },
+    {
+      "round": 3,
+      "status": "done",
+      "description": "State reconciliation — all planned components marked done, migration complete",
+      "components": [
+        "frontend/src/components/chat/PayloadConfirmCard.tsx",
+        "frontend/src/components/chat/ChatBubble.tsx",
+        "frontend/src/components/chat/ChatMessage.tsx",
+        "frontend/src/components/chat/ChatInput.tsx",
+        "frontend/src/components/charts/MetricsComparisonBar.tsx",
+        "frontend/src/components/charts/SharpeComparisonChart.tsx",
+        "frontend/src/components/charts/AllocationPieChart.tsx",
+        "frontend/src/components/charts/MetricsCard.tsx",
+        "frontend/src/components/charts/QuantumCircuitInfo.tsx",
+        "frontend/src/components/charts/WeightsTable.tsx",
+        "frontend/src/components/dashboard/AgentProgressPanel.tsx",
+        "frontend/src/components/dashboard/ComparisonDashboard.tsx",
+        "frontend/src/components/dashboard/LLMExplanationPanel.tsx",
+        "frontend/src/components/dashboard/ConstraintForm.tsx",
+        "frontend/src/components/dashboard/FrontierReportViewer.tsx"
+      ]
+    }
+  ],
+  "components": [
+    {
+      "path": "frontend/src/components/ui/button.tsx",
+      "status": "done",
+      "round": 1
+    },
+    {
+      "path": "frontend/src/components/ui/input.tsx",
+      "status": "done",
+      "round": 1
+    },
+    {
+      "path": "frontend/src/components/ui/tabs.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/card.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/slider.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/progress.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/toaster.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/scroll-area.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/label.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/tooltip.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/alert.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/switch.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/dialog.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/badge.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/table.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/separator.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/toast.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/dropdown-menu.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/select.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/textarea.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ui/skeleton.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/MetricsChart.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/OptimizeForm.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/AgentProgressPanel.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/AssetSearchCombobox.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/AllocationChart.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ComparisonDashboard.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/SectorConstraintRow.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/ConstraintForm.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/RunHistory.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/TickerBadge.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/chat/ChatAssistant.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/chat/PayloadConfirmCard.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/chat/ChatBubble.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/chat/ChatMessage.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/chat/ChatInput.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/charts/MetricsComparisonBar.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/charts/SharpeComparisonChart.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/charts/AllocationPieChart.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/charts/MetricsCard.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/charts/QuantumCircuitInfo.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/charts/WeightsTable.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/dashboard/AgentProgressPanel.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/dashboard/ComparisonDashboard.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/dashboard/LLMExplanationPanel.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/dashboard/ConstraintForm.tsx",
+      "status": "done",
+      "round": 2
+    },
+    {
+      "path": "frontend/src/components/dashboard/FrontierReportViewer.tsx",
+      "status": "done",
+      "round": 2
+    }
+  ],
+  "created_at": "2026-06-15T10:41:58.428Z",
+  "updated_at": "2026-06-18T00:00:00.000Z"
+}

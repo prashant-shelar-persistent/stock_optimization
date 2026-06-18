@@ -1,6 +1,8 @@
 /**
  * Toaster — global toast notification container.
  * Based on shadcn/ui toast pattern with Radix UI Toast primitives.
+ *
+ * React 19: uses plain function components — no forwardRef needed.
  */
 
 import {

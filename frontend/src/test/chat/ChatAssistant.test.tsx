@@ -40,12 +40,19 @@ const mockConfirmRun = vi.fn().mockResolvedValue("run-abc-123");
 const mockResetSession = vi.fn();
 const mockRehydrate = vi.fn().mockResolvedValue(true);
 
+// Mutable variable so individual tests can override optimisticMessages.
+let mockOptimisticMessages: ChatMessage[] = [];
+
 vi.mock("@/hooks/useChatSession", () => ({
   useChatSession: () => ({
     sendMessage: mockSendMessage,
     confirmRun: mockConfirmRun,
     resetSession: mockResetSession,
     rehydrate: mockRehydrate,
+    isPending: false,
+    get optimisticMessages() {
+      return mockOptimisticMessages;
+    },
   }),
 }));
 
@@ -68,6 +75,8 @@ function resetStores() {
     agentProgress: [],
     activeTab: "classical",
   });
+  // Reset the optimistic messages mock to empty
+  mockOptimisticMessages = [];
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────
@@ -160,9 +169,11 @@ describe("welcome message", () => {
   });
 
   it("does NOT show welcome message when messages exist", () => {
+    const msg = makeMessage("user", "Hello");
     act(() => {
       useChatStore.getState().openPanel();
-      useChatStore.getState().appendMessage(makeMessage("user", "Hello"));
+      useChatStore.getState().appendMessage(msg);
+      mockOptimisticMessages = [msg];
     });
     render(<ChatAssistant />);
     expect(
@@ -175,28 +186,36 @@ describe("welcome message", () => {
 
 describe("messages", () => {
   it("renders user messages from the store", () => {
+    const msg = makeMessage("user", "Build me a portfolio");
     act(() => {
       useChatStore.getState().openPanel();
-      useChatStore.getState().appendMessage(makeMessage("user", "Build me a portfolio"));
+      useChatStore.getState().appendMessage(msg);
+      mockOptimisticMessages = [msg];
     });
     render(<ChatAssistant />);
     expect(screen.getByText("Build me a portfolio")).toBeInTheDocument();
   });
 
   it("renders assistant messages from the store", () => {
+    const msg = makeMessage("assistant", "What tickers?");
     act(() => {
       useChatStore.getState().openPanel();
-      useChatStore.getState().appendMessage(makeMessage("assistant", "What tickers?"));
+      useChatStore.getState().appendMessage(msg);
+      mockOptimisticMessages = [msg];
     });
     render(<ChatAssistant />);
     expect(screen.getByText("What tickers?")).toBeInTheDocument();
   });
 
   it("renders multiple messages in order", () => {
+    const msgs = [
+      makeMessage("user", "First message"),
+      makeMessage("assistant", "Second message"),
+    ];
     act(() => {
       useChatStore.getState().openPanel();
-      useChatStore.getState().appendMessage(makeMessage("user", "First message"));
-      useChatStore.getState().appendMessage(makeMessage("assistant", "Second message"));
+      msgs.forEach((m) => useChatStore.getState().appendMessage(m));
+      mockOptimisticMessages = msgs;
     });
     render(<ChatAssistant />);
     expect(screen.getByText("First message")).toBeInTheDocument();

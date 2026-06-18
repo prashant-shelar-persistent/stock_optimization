@@ -24,11 +24,13 @@
  * Props:
  *   result — OptimizationRunDetail from the completed optimization run
  *
+ * React 19: uses named imports — no `import * as React` needed.
+ *
  * Usage:
  *   <ComparisonDashboard result={optimizationResult} />
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -74,13 +76,13 @@ import type {
   ComparisonSummary,
 } from "@/types/api";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface ComparisonDashboardProps {
   result: OptimizationRunDetail;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Format solve time from milliseconds to a human-readable string. */
 function formatSolveTime(ms: number): string {
@@ -98,7 +100,7 @@ function getDeltaClass(delta: number, higherIsBetter: boolean): string {
     : "text-red-500 dark:text-red-400";
 }
 
-// ── Comparison Summary Card ───────────────────────────────────────────────────
+// ── Comparison Summary Card ────────────────────────────────────────────────────
 
 interface ComparisonSummaryCardProps {
   comparison: ComparisonSummary;
@@ -284,7 +286,7 @@ function ComparisonSummaryCard({
   );
 }
 
-// ── Improvement row ───────────────────────────────────────────────────────────
+// ── Improvement row ────────────────────────────────────────────────────────────
 
 function ImprovementRow({
   label,
@@ -330,7 +332,7 @@ function ImprovementRow({
   );
 }
 
-// ── Metrics table ─────────────────────────────────────────────────────────────
+// ── Metrics table ──────────────────────────────────────────────────────────────
 
 interface MetricsTableProps {
   metrics: PortfolioMetrics;
@@ -438,7 +440,7 @@ function MetricsTable({
   );
 }
 
-// ── Quantum circuit info ──────────────────────────────────────────────────────
+// ── Quantum circuit info ───────────────────────────────────────────────────────
 
 interface QuantumInfoProps {
   type: "qaoa" | "vqe";
@@ -520,7 +522,7 @@ function QuantumInfo({
   );
 }
 
-// ── Classical tab content ─────────────────────────────────────────────────────
+// ── Classical tab content ──────────────────────────────────────────────────────
 
 function ClassicalTabContent({ result }: { result: OptimizationRunDetail }) {
   const { classical_result } = result;
@@ -569,7 +571,7 @@ function ClassicalTabContent({ result }: { result: OptimizationRunDetail }) {
   );
 }
 
-// ── QAOA tab content ──────────────────────────────────────────────────────────
+// ── QAOA tab content ───────────────────────────────────────────────────────────
 
 function QAOATabContent({ result }: { result: OptimizationRunDetail }) {
   const qaoa = result.quantum_result?.qaoa;
@@ -616,7 +618,7 @@ function QAOATabContent({ result }: { result: OptimizationRunDetail }) {
   );
 }
 
-// ── VQE tab content ───────────────────────────────────────────────────────────
+// ── VQE tab content ────────────────────────────────────────────────────────────
 
 function VQETabContent({ result }: { result: OptimizationRunDetail }) {
   const vqe = result.quantum_result?.vqe;
@@ -662,7 +664,7 @@ function VQETabContent({ result }: { result: OptimizationRunDetail }) {
   );
 }
 
-// ── LLM Explanation Panel ─────────────────────────────────────────────────────
+// ── LLM Explanation Panel ──────────────────────────────────────────────────────
 
 interface LLMPanelProps {
   explanation: string | null | undefined;
@@ -673,7 +675,7 @@ interface LLMPanelProps {
  * Lightweight markdown-like renderer.
  * Handles: **bold**, *italic*, paragraph breaks, and bullet points.
  */
-function renderExplanation(text: string): React.ReactNode {
+function renderExplanation(text: string): ReactNode {
   const paragraphs = text.split(/\n\n+/);
 
   return paragraphs.map((para, pIdx) => {
@@ -704,7 +706,7 @@ function renderExplanation(text: string): React.ReactNode {
   });
 }
 
-function renderInline(text: string): React.ReactNode {
+function renderInline(text: string): ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return parts.map((part, idx) => {
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -801,7 +803,7 @@ function LLMPanel({ explanation, isLoading = false }: LLMPanelProps) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
 /**
  * ComparisonDashboard renders the full optimization results comparison view.

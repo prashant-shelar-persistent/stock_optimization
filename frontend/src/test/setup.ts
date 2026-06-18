@@ -36,7 +36,12 @@ if (typeof Element.prototype.scrollIntoView === "undefined") {
   Element.prototype.scrollIntoView = function () {};
 }
 
-// Suppress noisy console.error from React about act() warnings in tests
+// Suppress noisy console.error from React about act() warnings in tests.
+// NOTE (React 19): `act()` now lives in the `react` package itself
+// (`import { act } from "react"`) rather than `react-dom/test-utils`.
+// The warning filter below still applies — React 19 emits the same
+// "not wrapped in act(...)" messages when state updates happen outside
+// of an act() boundary during tests.
 const originalError = console.error.bind(console);
 console.error = (...args: unknown[]) => {
   const msg = typeof args[0] === "string" ? args[0] : "";

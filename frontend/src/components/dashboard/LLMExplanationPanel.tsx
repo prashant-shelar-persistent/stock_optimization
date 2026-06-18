@@ -7,16 +7,22 @@
  *   - Which strategy is recommended and why
  *
  * Features:
- *   - Markdown-like rendering (bold, paragraphs)
+ *   - Markdown-like rendering (bold, italic, paragraphs, bullet lists)
  *   - Skeleton loading state while explanation is being generated
  *   - Collapsible on mobile
  *
  * Props:
  *   explanation — the LLM explanation string (null while loading)
  *   isLoading   — true while the llm_explanation node is running
+ *
+ * React 19 migration notes:
+ *   - No forwardRef — refs are plain props in React 19
+ *   - useId() for stable ARIA IDs
+ *   - Removed React namespace prefix where not needed
+ *   - Type-only imports use `import type`
  */
 
-import { useState } from "react";
+import { useState, useId } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -34,7 +40,7 @@ interface LLMExplanationPanelProps {
 
 /**
  * Very lightweight markdown-like renderer.
- * Handles: **bold**, paragraph breaks, and bullet points (- item).
+ * Handles: **bold**, *italic*, paragraph breaks, and bullet points (- item).
  * Does NOT use a full markdown library to keep the bundle small.
  */
 function renderExplanation(text: string): React.ReactNode {
@@ -45,7 +51,10 @@ function renderExplanation(text: string): React.ReactNode {
     if (para.trim().startsWith("- ") || para.trim().startsWith("• ")) {
       const items = para
         .split("\n")
-        .filter((line) => line.trim().startsWith("- ") || line.trim().startsWith("• "));
+        .filter(
+          (line) =>
+            line.trim().startsWith("- ") || line.trim().startsWith("• "),
+        );
       return (
         <ul key={pIdx} className="my-2 ml-4 list-disc space-y-1">
           {items.map((item, iIdx) => (
@@ -96,7 +105,7 @@ function renderInline(text: string): React.ReactNode {
 
 function ExplanationSkeleton() {
   return (
-    <div className="space-y-2 animate-pulse">
+    <div className="space-y-2 animate-pulse" aria-label="Loading explanation…" aria-busy="true">
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-[92%]" />
       <Skeleton className="h-4 w-[85%]" />
@@ -117,16 +126,23 @@ export function LLMExplanationPanel({
   isLoading = false,
 }: LLMExplanationPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const panelId = useId();
+  const contentId = useId();
 
   const hasContent = Boolean(explanation);
 
   return (
-    <div className="rounded-lg border bg-card">
+    <section
+      className="rounded-lg border bg-card"
+      aria-labelledby={panelId}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3">
         <div className="flex items-center gap-2 flex-1">
-          <Sparkles className="h-4 w-4 text-violet-500" />
-          <h3 className="text-sm font-semibold">AI Portfolio Explanation</h3>
+          <Sparkles className="h-4 w-4 text-violet-500" aria-hidden="true" />
+          <h3 id={panelId} className="text-sm font-semibold">
+            AI Portfolio Explanation
+          </h3>
           <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
             GPT-4o
           </span>
@@ -138,11 +154,13 @@ export function LLMExplanationPanel({
             className="h-7 w-7 p-0"
             onClick={() => setIsExpanded((prev) => !prev)}
             aria-label={isExpanded ? "Collapse explanation" : "Expand explanation"}
+            aria-expanded={isExpanded}
+            aria-controls={contentId}
           >
             {isExpanded ? (
-              <ChevronUp className="h-4 w-4" />
+              <ChevronUp className="h-4 w-4" aria-hidden="true" />
             ) : (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
             )}
           </Button>
         )}
@@ -152,17 +170,21 @@ export function LLMExplanationPanel({
 
       {/* Content */}
       <div
+        id={contentId}
         className={cn(
           "overflow-hidden transition-all duration-300",
           isExpanded ? "max-h-[600px]" : "max-h-0",
         )}
+        role="region"
+        aria-label="AI explanation content"
+        hidden={!isExpanded}
       >
         <div className="px-4 py-4">
           {isLoading && !hasContent && <ExplanationSkeleton />}
 
           {!isLoading && !hasContent && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MessageSquare className="h-4 w-4" />
+              <MessageSquare className="h-4 w-4" aria-hidden="true" />
               <span>
                 Explanation will appear here once the optimization completes.
               </span>
@@ -176,6 +198,6 @@ export function LLMExplanationPanel({
           )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

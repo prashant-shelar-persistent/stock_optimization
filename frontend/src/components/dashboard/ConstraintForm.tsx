@@ -10,14 +10,25 @@
  *   6. Weight constraints
  *   7. Lookback period
  *   8. Quantum toggle
+ *
+ * React 19 migration notes:
+ *   - No forwardRef — refs are plain props in React 19
+ *   - useId() for stable ARIA IDs
+ *   - useActionState() for form submission state management
+ *   - useFormStatus() (react-dom) drives SubmitButton disabled/loading state
+ *   - React.ComponentProps<"element"> instead of React.HTMLAttributes
+ *   - Type-only imports use `import type`
  */
 
 import {
   useState,
   useCallback,
+  useId,
+  useActionState,
   type KeyboardEvent,
   type ChangeEvent,
 } from "react";
+import { useFormStatus } from "react-dom";
 import { useOptimize } from "@/hooks/useOptimize";
 import { useAssetSearch } from "@/hooks/useAssetSearch";
 import { Button } from "@/components/ui/button";
@@ -161,6 +172,7 @@ function TickerInput({ tickers, onAdd, onRemove }: TickerInputProps) {
   const [query, setQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const { results, isLoading } = useAssetSearch(query);
+  const inputId = useId();
 
   const handleAdd = useCallback(
     (ticker: string) => {
@@ -207,13 +219,22 @@ function TickerInput({ tickers, onAdd, onRemove }: TickerInputProps) {
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
+            id={inputId}
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+              setQuery(e.target.value);
+              setShowDropdown(true);
+            }}
             onKeyDown={handleKeyDown}
             onFocus={() => setShowDropdown(true)}
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
             placeholder="Search ticker (e.g. AAPL)…"
             className="pl-8 pr-8 h-9 text-sm"
+            autoComplete="off"
+            aria-label="Search for a ticker symbol"
+            aria-expanded={showDropdown}
+            aria-haspopup="listbox"
+            role="combobox"
           />
           {isLoading && (
             <Loader2 className="absolute right-2.5 top-2.5 h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -221,8 +242,12 @@ function TickerInput({ tickers, onAdd, onRemove }: TickerInputProps) {
           {!isLoading && query && (
             <button
               type="button"
-              onClick={() => { setQuery(""); setShowDropdown(false); }}
+              onClick={() => {
+                setQuery("");
+                setShowDropdown(false);
+              }}
               className="absolute right-2.5 top-2.5"
+              aria-label="Clear search"
             >
               <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
             </button>
@@ -230,11 +255,15 @@ function TickerInput({ tickers, onAdd, onRemove }: TickerInputProps) {
         </div>
 
         {showDropdown && (results.length > 0 || query.trim()) && (
-          <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+          <div
+            className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md"
+            role="listbox"
+            aria-label="Ticker search results"
+          >
             {results.length > 0 ? (
               <ul className="max-h-48 overflow-auto py-1">
                 {results.map((asset) => (
-                  <li key={asset.ticker}>
+                  <li key={asset.ticker} role="option" aria-selected={tickers.includes(asset.ticker)}>
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
@@ -260,7 +289,7 @@ function TickerInput({ tickers, onAdd, onRemove }: TickerInputProps) {
                     onMouseDown={() => handleAdd(query.trim())}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add "{query.toUpperCase()}"
+                    Add &ldquo;{query.toUpperCase()}&rdquo;
                   </button>
                 </div>
               )
@@ -312,6 +341,7 @@ interface ObjectiveRowProps {
 }
 
 function ObjectiveRow({ obj, onChange }: ObjectiveRowProps) {
+  const thresholdId = useId();
   const [thresholdInput, setThresholdInput] = useState(
     obj.threshold != null ? String(obj.threshold) : "",
   );
@@ -348,6 +378,7 @@ function ObjectiveRow({ obj, onChange }: ObjectiveRowProps) {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
         <Select
           value={obj.direction}
           onValueChange={(v) => onChange({ direction: v as ObjectiveDirection })}
@@ -379,6 +410,7 @@ function ObjectiveRow({ obj, onChange }: ObjectiveRowProps) {
             value={[Math.round(obj.weight * 100)]}
             onValueChange={([v]) => onChange({ weight: v / 100 })}
             className="w-full"
+            aria-label={`Weight for ${obj._meta.label}`}
           />
         </div>
       )}
@@ -390,13 +422,17 @@ function ObjectiveRow({ obj, onChange }: ObjectiveRowProps) {
             Threshold
           </span>
           <Input
+            id={thresholdId}
             type="number"
             step="any"
             placeholder="optional"
             value={thresholdInput}
-            onChange={(e) => setThresholdInput(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setThresholdInput(e.target.value)
+            }
             onBlur={handleThresholdBlur}
             className="h-6 text-xs px-2 flex-1"
+            aria-label={`Threshold for ${obj._meta.label}`}
           />
           <TooltipProvider>
             <Tooltip>
@@ -415,10 +451,57 @@ function ObjectiveRow({ obj, onChange }: ObjectiveRowProps) {
   );
 }
 
+// ── Submit button (uses useFormStatus — must be rendered inside <form>) ────────
+
+/**
+ * SubmitButton — reads pending state directly from the nearest ancestor <form>
+ * via React 19's `useFormStatus` hook (react-dom). This avoids prop-drilling
+ * `isPending` from `useActionState` down to the button.
+ *
+ * IMPORTANT: This component must be rendered as a *child* of the `<form>`
+ * element for `useFormStatus` to observe the form's submission state.
+ */
+function SubmitButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <Button
+      type="submit"
+      disabled={pending}
+      className="w-full gap-2"
+      size="default"
+      aria-busy={pending}
+    >
+      {pending ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Running Optimization…
+        </>
+      ) : (
+        <>
+          <BarChart2 className="h-4 w-4" />
+          Run Optimization
+        </>
+      )}
+    </Button>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
-  const { submit, isSubmitting } = useOptimize();
+  const { submit } = useOptimize();
+
+  // Stable IDs for ARIA associations (React 19 useId)
+  const budgetId = useId();
+  const budgetErrorId = useId();
+  const budgetHintId = useId();
+  const minReturnId = useId();
+  const maxVolId = useId();
+  const maxWeightId = useId();
+  const lookbackId = useId();
+  const numAssetsId = useId();
+  const frontierPointsId = useId();
 
   // ── Core state ──
   const [tickers, setTickers] = useState<string[]>(DEFAULT_TICKERS);
@@ -458,7 +541,54 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
   // ── Validation errors ──
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // ── Budget helpers ──────────────────────────────────────────────────────────
+  // ── useActionState for form submission (React 19) ──
+  // `formAction` is passed to <form action={...}>.
+  // The third value (pending) is intentionally unused here — the SubmitButton
+  // sub-component reads pending state via useFormStatus() instead, which is
+  // the idiomatic React 19 pattern for driving button disabled/loading state.
+  const [_actionState, formAction] = useActionState(
+    async (_prevState: null, formData: FormData) => {
+      void formData; // FormData not used directly — we read from state
+      if (!validate()) return null;
+
+      const finalBudget = parseBudget(budgetInput);
+
+      // Build objectives array — only include enabled rows
+      const enabledObjectives = objectives
+        .filter((o) => o.enabled)
+        .map(({ _meta: _m, ...rest }) => rest as BusinessObjective);
+
+      // Build frontier config
+      const frontierConfig: FrontierConfig | undefined = frontierEnabled
+        ? {
+            enabled: true,
+            x_measure: frontierX,
+            y_measure: frontierY,
+            num_points: frontierPoints,
+          }
+        : undefined;
+
+      const payload: OptimizationRequest = {
+        tickers,
+        budget: finalBudget,
+        ...(enabledObjectives.length > 0 ? { objectives: enabledObjectives } : {}),
+        ...(frontierConfig ? { frontier: frontierConfig } : {}),
+        ...(minReturn !== undefined ? { min_return: minReturn } : {}),
+        ...(maxVolatility !== undefined ? { max_volatility: maxVolatility } : {}),
+        max_weight_per_asset: maxWeightPerAsset,
+        ...(runQuantum ? { num_assets_to_select: numAssetsToSelect } : {}),
+        lookback_days: lookbackDays,
+        run_quantum: runQuantum,
+      };
+
+      const runId = await submit(payload);
+      if (runId && onRunStarted) onRunStarted(runId);
+      return null;
+    },
+    null,
+  );
+
+  // ── Budget helpers ────────────────────────────────────────────────────────
 
   function validateBudgetInput(raw: string): string | undefined {
     const trimmed = raw.trim();
@@ -491,7 +621,11 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
         return next;
       });
     } else if (raw.trim() !== "") {
-      setErrors((prev) => { const next = { ...prev }; delete next.budget; return next; });
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.budget;
+        return next;
+      });
     }
   }
 
@@ -504,11 +638,15 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
       const numeric = parseBudget(budgetInput);
       setBudget(numeric);
       setBudgetInput(numeric.toLocaleString("en-US", { maximumFractionDigits: 2 }));
-      setErrors((prev) => { const next = { ...prev }; delete next.budget; return next; });
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.budget;
+        return next;
+      });
     }
   }
 
-  // ── Objectives helpers ──────────────────────────────────────────────────────
+  // ── Objectives helpers ────────────────────────────────────────────────────
 
   function updateObjective(
     name: ObjectiveName,
@@ -519,12 +657,12 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
     );
   }
 
-  // ── Frontier helpers ────────────────────────────────────────────────────────
+  // ── Frontier helpers ──────────────────────────────────────────────────────
 
   const frontierXOptions = FRONTIER_MEASURES.filter((m) => m.value !== frontierY);
   const frontierYOptions = FRONTIER_MEASURES.filter((m) => m.value !== frontierX);
 
-  // ── Validation ──────────────────────────────────────────────────────────────
+  // ── Validation ────────────────────────────────────────────────────────────
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -550,57 +688,18 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
     if (enabledObjs.length > 0) {
       const totalWeight = enabledObjs.reduce((s, o) => s + o.weight, 0);
       if (totalWeight <= 0)
-        newErrors.objectives = "At least one enabled objective must have a positive weight.";
+        newErrors.objectives =
+          "At least one enabled objective must have a positive weight.";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    const finalBudget = parseBudget(budgetInput);
-
-    // Build objectives array — only include enabled rows
-    const enabledObjectives = objectives
-      .filter((o) => o.enabled)
-      .map(({ _meta: _m, ...rest }) => rest as BusinessObjective);
-
-    // Build frontier config
-    const frontierConfig: FrontierConfig | undefined = frontierEnabled
-      ? {
-          enabled: true,
-          x_measure: frontierX,
-          y_measure: frontierY,
-          num_points: frontierPoints,
-        }
-      : undefined;
-
-    const payload: OptimizationRequest = {
-      tickers,
-      budget: finalBudget,
-      ...(enabledObjectives.length > 0 ? { objectives: enabledObjectives } : {}),
-      ...(frontierConfig ? { frontier: frontierConfig } : {}),
-      ...(minReturn !== undefined ? { min_return: minReturn } : {}),
-      ...(maxVolatility !== undefined ? { max_volatility: maxVolatility } : {}),
-      max_weight_per_asset: maxWeightPerAsset,
-      ...(runQuantum ? { num_assets_to_select: numAssetsToSelect } : {}),
-      lookback_days: lookbackDays,
-      run_quantum: runQuantum,
-    };
-
-    const runId = await submit(payload);
-    if (runId && onRunStarted) onRunStarted(runId);
-  };
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <form id="constraint-form" onSubmit={handleSubmit} className="space-y-5">
+    <form id="constraint-form" action={formAction} className="space-y-5">
 
       {/* ── Assets ── */}
       <div className="space-y-2">
@@ -610,7 +709,11 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
           onAdd={(t) => setTickers((prev) => [...prev, t])}
           onRemove={(t) => setTickers((prev) => prev.filter((x) => x !== t))}
         />
-        {errors.tickers && <p className="text-xs text-destructive">{errors.tickers}</p>}
+        {errors.tickers && (
+          <p className="text-xs text-destructive" role="alert">
+            {errors.tickers}
+          </p>
+        )}
       </div>
 
       <Separator />
@@ -618,21 +721,21 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
       {/* ── Budget ── */}
       <div className="space-y-2">
         <FieldLabel
-          htmlFor="budget"
+          htmlFor={budgetId}
           label="Budget (USD)"
           tooltip="Total investment budget in US dollars."
         />
         <div className="relative">
           <span className="absolute left-3 top-2 text-sm text-muted-foreground select-none">$</span>
           <Input
-            id="budget"
+            id={budgetId}
             type="text"
             inputMode="decimal"
             value={budgetInput}
             onChange={handleBudgetChange}
             onBlur={handleBudgetBlur}
             placeholder="e.g. 100,000"
-            aria-describedby={errors.budget ? "budget-error" : "budget-hint"}
+            aria-describedby={errors.budget ? budgetErrorId : budgetHintId}
             aria-invalid={!!errors.budget}
             className={cn(
               "pl-6 h-9 text-sm",
@@ -641,11 +744,11 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
           />
         </div>
         {errors.budget ? (
-          <p id="budget-error" className="text-xs text-destructive" role="alert">
+          <p id={budgetErrorId} className="text-xs text-destructive" role="alert">
             {errors.budget}
           </p>
         ) : (
-          <p id="budget-hint" className="text-xs text-muted-foreground">
+          <p id={budgetHintId} className="text-xs text-muted-foreground">
             Enter a positive dollar amount (e.g. 50,000 or 1,000,000)
           </p>
         )}
@@ -684,7 +787,9 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
           ))}
         </div>
         {errors.objectives && (
-          <p className="text-xs text-destructive">{errors.objectives}</p>
+          <p className="text-xs text-destructive" role="alert">
+            {errors.objectives}
+          </p>
         )}
       </div>
 
@@ -750,14 +855,16 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
             </div>
 
             {errors.frontier && (
-              <p className="text-xs text-destructive">{errors.frontier}</p>
+              <p className="text-xs text-destructive" role="alert">
+                {errors.frontier}
+              </p>
             )}
 
             {/* Number of points */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <FieldLabel
-                  htmlFor="frontier-points"
+                  htmlFor={frontierPointsId}
                   label="Frontier Points"
                   tooltip="Number of parametric solves used to trace the frontier (5–100). More points = smoother curve but slower."
                 />
@@ -766,13 +873,14 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
                 </span>
               </div>
               <Slider
-                id="frontier-points"
+                id={frontierPointsId}
                 min={5}
                 max={50}
                 step={5}
                 value={[frontierPoints]}
                 onValueChange={([v]) => setFrontierPoints(v)}
                 className="w-full"
+                aria-label="Number of frontier points"
               />
             </div>
 
@@ -794,7 +902,7 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <FieldLabel
-              htmlFor="min-return"
+              htmlFor={minReturnId}
               label="Min Return"
               tooltip="Minimum acceptable annualised portfolio return (0–50%)"
             />
@@ -803,39 +911,49 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
             </span>
           </div>
           <Slider
-            id="min-return"
+            id={minReturnId}
             min={0}
             max={50}
             step={1}
             value={[minReturn !== undefined ? minReturn * 100 : 0]}
             onValueChange={([v]) => setMinReturn(v > 0 ? v / 100 : undefined)}
             className="w-full"
+            aria-label="Minimum return constraint"
           />
-          {errors.minReturn && <p className="text-xs text-destructive">{errors.minReturn}</p>}
+          {errors.minReturn && (
+            <p className="text-xs text-destructive" role="alert">
+              {errors.minReturn}
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <FieldLabel
-              htmlFor="max-vol"
+              htmlFor={maxVolId}
               label="Max Volatility"
               tooltip="Maximum acceptable annualised portfolio volatility (0–80%)"
             />
             <span className="text-xs tabular-nums text-muted-foreground">
-              {maxVolatility !== undefined ? `${(maxVolatility * 100).toFixed(0)}%` : "None"}
+              {maxVolatility !== undefined
+                ? `${(maxVolatility * 100).toFixed(0)}%`
+                : "None"}
             </span>
           </div>
           <Slider
-            id="max-vol"
+            id={maxVolId}
             min={0}
             max={80}
             step={1}
             value={[maxVolatility !== undefined ? maxVolatility * 100 : 0]}
             onValueChange={([v]) => setMaxVolatility(v > 0 ? v / 100 : undefined)}
             className="w-full"
+            aria-label="Maximum volatility constraint"
           />
           {errors.maxVolatility && (
-            <p className="text-xs text-destructive">{errors.maxVolatility}</p>
+            <p className="text-xs text-destructive" role="alert">
+              {errors.maxVolatility}
+            </p>
           )}
         </div>
       </div>
@@ -846,7 +964,7 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <FieldLabel
-            htmlFor="max-weight"
+            htmlFor={maxWeightId}
             label="Max Weight per Asset"
             tooltip="Maximum allocation fraction for any single asset (5–100%)"
           />
@@ -855,13 +973,14 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
           </span>
         </div>
         <Slider
-          id="max-weight"
+          id={maxWeightId}
           min={5}
           max={100}
           step={5}
           value={[maxWeightPerAsset * 100]}
           onValueChange={([v]) => setMaxWeightPerAsset(v / 100)}
           className="w-full"
+          aria-label="Maximum weight per asset"
         />
       </div>
 
@@ -871,20 +990,23 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <FieldLabel
-            htmlFor="lookback"
+            htmlFor={lookbackId}
             label="Lookback Period"
             tooltip="Number of trading days of historical data to use"
           />
-          <span className="text-xs tabular-nums text-muted-foreground">{lookbackDays}d</span>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {lookbackDays}d
+          </span>
         </div>
         <Slider
-          id="lookback"
+          id={lookbackId}
           min={60}
           max={756}
           step={21}
           value={[lookbackDays]}
           onValueChange={([v]) => setLookbackDays(v)}
           className="w-full"
+          aria-label="Lookback period in trading days"
         />
       </div>
 
@@ -911,7 +1033,7 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
           <div className="ml-6 space-y-2">
             <div className="flex items-center justify-between">
               <FieldLabel
-                htmlFor="num-assets"
+                htmlFor={numAssetsId}
                 label="Assets to Select (QUBO)"
                 tooltip="Number of assets the quantum algorithm will select from the universe"
               />
@@ -920,16 +1042,19 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
               </span>
             </div>
             <Slider
-              id="num-assets"
+              id={numAssetsId}
               min={2}
               max={Math.min(tickers.length, 10)}
               step={1}
               value={[numAssetsToSelect]}
               onValueChange={([v]) => setNumAssetsToSelect(v)}
               className="w-full"
+              aria-label="Number of assets to select for quantum optimization"
             />
             {errors.numAssetsToSelect && (
-              <p className="text-xs text-destructive">{errors.numAssetsToSelect}</p>
+              <p className="text-xs text-destructive" role="alert">
+                {errors.numAssetsToSelect}
+              </p>
             )}
             <p className="text-xs text-muted-foreground">
               Quantum simulation is slow for &gt;8 assets
@@ -941,24 +1066,12 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
       <Separator />
 
       {/* ── Submit ── */}
-      <Button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full gap-2"
-        size="default"
-      >
-        {isSubmitting ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Running Optimization…
-          </>
-        ) : (
-          <>
-            <BarChart2 className="h-4 w-4" />
-            Run Optimization
-          </>
-        )}
-      </Button>
+      {/* SubmitButton is a dedicated sub-component so that useFormStatus()
+          can read the pending state from this <form>'s action. Per React 19
+          rules, useFormStatus must be called inside a component that is
+          rendered *within* the <form> element — not in the form component
+          itself. */}
+      <SubmitButton />
     </form>
   );
 }

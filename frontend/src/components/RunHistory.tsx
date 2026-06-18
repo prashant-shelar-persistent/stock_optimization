@@ -17,6 +17,8 @@
  *   - Loading: 5 Skeleton rows
  *   - Empty state: prompt to start a run
  *   - Error state: message + retry button
+ *
+ * React 19: uses named imports — no `import * as React` needed.
  */
 
 import { Link } from "react-router-dom";

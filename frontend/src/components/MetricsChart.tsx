@@ -2,20 +2,22 @@
  * MetricsChart — Side-by-side metrics comparison bar chart.
  *
  * Displays three key portfolio metrics (Expected Return, Volatility, Sharpe
- * Ratio) as grouped bar charts, comparing Classical, QAOA, and VQE strategies
- * side-by-side. Each metric is rendered in its own responsive bar chart within
- * a 3-column grid (stacked on mobile).
+ * Ratio) as individual bar charts, comparing Classical, QAOA, and VQE
+ * strategies side-by-side. Each metric is rendered in its own responsive bar
+ * chart within a 3-column grid (stacked on mobile). Each bar is individually
+ * coloured via Recharts `Cell` components.
  *
  * Features:
- *   - Three grouped bar charts: Return, Volatility, Sharpe Ratio
- *   - Classical (blue), QAOA (violet), VQE (purple) color coding
+ *   - Three bar charts: Return, Volatility, Sharpe Ratio
+ *   - Classical (blue), QAOA (violet), VQE (purple) colour coding via Cell
  *   - Null/undefined strategies are omitted — only available solvers shown
- *   - Custom tooltips with formatted values
+ *   - Custom tooltips with formatted values, passed as render functions for
+ *     React 19 concurrent-rendering safety (no stale-closure risk)
  *   - Responsive containers (100% width)
- *   - Accessible color palette consistent with the rest of the dashboard
+ *   - Accessible colour palette consistent with the rest of the dashboard
  *
  * Props:
- *   classical — PortfolioMetrics from the classical optimization (required)
+ *   classical — PortfolioMetrics from the classical optimisation (required)
  *   qaoa      — optional PortfolioMetrics from QAOA
  *   vqe       — optional PortfolioMetrics from VQE
  *
@@ -27,6 +29,7 @@
  *   />
  */
 
+import { useCallback } from "react";
 import {
   BarChart,
   Bar,
@@ -34,7 +37,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Cell,
 } from "recharts";
@@ -55,13 +57,13 @@ export interface MetricsChartProps {
   vqe?: PortfolioMetrics | null;
 }
 
-/** A single data point for a grouped bar chart. */
+/** A single data point for a bar chart. */
 interface MetricDataPoint {
   /** Strategy name shown on the X-axis. */
   name: string;
   /** Metric value. */
   value: number;
-  /** Fill color for this bar. */
+  /** Fill colour for this bar (applied via Cell). */
   color: string;
 }
 
@@ -82,6 +84,11 @@ interface CustomTooltipProps {
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
+/**
+ * Custom Recharts tooltip rendered as a render function (not a pre-instantiated
+ * element) so that React 19 concurrent rendering never encounters stale closures
+ * from a captured ReactElement snapshot.
+ */
 function CustomTooltip({
   active,
   payload,
@@ -138,6 +145,25 @@ function SingleMetricChart({
   const domainMax = maxVal + padding;
   const domainMin = Math.min(minVal - padding, 0);
 
+  /**
+   * Render function for the Recharts Tooltip `content` prop.
+   *
+   * Passing a render function (rather than a pre-instantiated ReactElement)
+   * is the React 19 concurrent-rendering-safe pattern: Recharts calls this
+   * function during its own render cycle, so the `isPercent` closure value
+   * is always current and never stale across concurrent renders or Suspense
+   * boundaries.
+   */
+  const renderTooltip = useCallback(
+    (props: object) => (
+      <CustomTooltip
+        {...(props as CustomTooltipProps)}
+        isPercent={isPercent}
+      />
+    ),
+    [isPercent],
+  );
+
   return (
     <div className="flex flex-col gap-1">
       <p className="text-center text-xs font-medium text-muted-foreground">
@@ -173,9 +199,7 @@ function SingleMetricChart({
             }
           />
           <Tooltip
-            content={
-              <CustomTooltip isPercent={isPercent} />
-            }
+            content={renderTooltip}
             cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
           />
           <Bar dataKey="value" radius={[3, 3, 0, 0]} maxBarSize={52}>
@@ -198,7 +222,9 @@ function SingleMetricChart({
  * MetricsChart renders three side-by-side bar charts comparing Expected Return,
  * Volatility, and Sharpe Ratio across Classical, QAOA, and VQE strategies.
  *
- * Null/undefined strategies are omitted from all charts automatically.
+ * Each chart uses Recharts `Cell` components to apply per-bar colours
+ * (blue for Classical, violet for QAOA, purple for VQE). Null/undefined
+ * strategies are omitted from all charts automatically.
  */
 export function MetricsChart({ classical, qaoa, vqe }: MetricsChartProps) {
   // Build data arrays for each metric
@@ -285,7 +311,7 @@ export function MetricsChart({ classical, qaoa, vqe }: MetricsChartProps) {
 
   return (
     <div className="w-full space-y-2">
-      {/* Legend */}
+      {/* Colour legend */}
       <div className="flex flex-wrap justify-center gap-x-5 gap-y-1">
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span
@@ -338,6 +364,3 @@ export function MetricsChart({ classical, qaoa, vqe }: MetricsChartProps) {
     </div>
   );
 }
-
-// Suppress unused import warning — Cell is used inside SingleMetricChart
-void Legend;

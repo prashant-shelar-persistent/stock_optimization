@@ -14,11 +14,19 @@
  * On submit it calls useOptimize().submit() and propagates the run_id upward
  * via the onRunStarted callback.
  *
+ * React 19: uses named imports — no `import * as React` needed.
+ *
  * Usage:
  *   <ConstraintForm onRunStarted={(runId) => console.log(runId)} />
  */
 
-import * as React from "react";
+import {
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   Plus,
   Info,
@@ -68,7 +76,7 @@ import { useUIStore } from "@/store/uiStore";
 import { formatPercent, formatCurrency } from "@/lib/utils";
 import type { OptimizationRequest, SectorConstraint } from "@/types/api";
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const KNOWN_SECTORS = [
   "Technology",
@@ -88,7 +96,7 @@ const DEFAULT_BUDGET = 100_000;
 const DEFAULT_LOOKBACK_DAYS = 252;
 const DEFAULT_NUM_ASSETS = 5;
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface SelectedAsset {
   ticker: string;
@@ -109,7 +117,7 @@ interface FormErrors {
   general?: string;
 }
 
-// ── Helper: InfoTooltip ───────────────────────────────────────────────────────
+// ── Helper: InfoTooltip ────────────────────────────────────────────────────────
 
 function InfoTooltip({ content }: { content: string }) {
   return (
@@ -128,10 +136,10 @@ function InfoTooltip({ content }: { content: string }) {
   );
 }
 
-// ── Helper: SectionHeader ─────────────────────────────────────────────────────
+// ── Helper: SectionHeader ──────────────────────────────────────────────────────
 
 interface SectionHeaderProps {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description?: string;
   collapsible?: boolean;
@@ -176,7 +184,7 @@ function SectionHeader({
   );
 }
 
-// ── Helper: SliderField ───────────────────────────────────────────────────────
+// ── Helper: SliderField ────────────────────────────────────────────────────────
 
 interface SliderFieldProps {
   id: string;
@@ -248,7 +256,7 @@ function SliderField({
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export interface ConstraintFormProps {
   /**
@@ -266,46 +274,42 @@ export function ConstraintForm({
 }: ConstraintFormProps) {
   // ── Form state ──────────────────────────────────────────────────────────────
 
-  const [selectedAssets, setSelectedAssets] = React.useState<SelectedAsset[]>(
-    [],
-  );
-  const [budget, setBudget] = React.useState<number>(DEFAULT_BUDGET);
-  const [budgetInput, setBudgetInput] = React.useState<string>(
+  const [selectedAssets, setSelectedAssets] = useState<SelectedAsset[]>([]);
+  const [budget, setBudget] = useState<number>(DEFAULT_BUDGET);
+  const [budgetInput, setBudgetInput] = useState<string>(
     String(DEFAULT_BUDGET),
   );
-  const [minReturn, setMinReturn] = React.useState<number | undefined>(
+  const [minReturn, setMinReturn] = useState<number | undefined>(undefined);
+  const [maxVolatility, setMaxVolatility] = useState<number | undefined>(
     undefined,
   );
-  const [maxVolatility, setMaxVolatility] = React.useState<
+  const [maxWeightPerAsset, setMaxWeightPerAsset] = useState<
     number | undefined
   >(undefined);
-  const [maxWeightPerAsset, setMaxWeightPerAsset] = React.useState<
+  const [minWeightPerAsset, setMinWeightPerAsset] = useState<
     number | undefined
   >(undefined);
-  const [minWeightPerAsset, setMinWeightPerAsset] = React.useState<
-    number | undefined
-  >(undefined);
-  const [sectorConstraints, setSectorConstraints] = React.useState<
+  const [sectorConstraints, setSectorConstraints] = useState<
     SectorConstraint[]
   >([]);
-  const [newSector, setNewSector] = React.useState<string>("");
-  const [runQuantum, setRunQuantum] = React.useState<boolean>(true);
-  const [numAssetsToSelect, setNumAssetsToSelect] = React.useState<number>(
+  const [newSector, setNewSector] = useState<string>("");
+  const [runQuantum, setRunQuantum] = useState<boolean>(true);
+  const [numAssetsToSelect, setNumAssetsToSelect] = useState<number>(
     DEFAULT_NUM_ASSETS,
   );
-  const [lookbackDays, setLookbackDays] = React.useState<number>(
+  const [lookbackDays, setLookbackDays] = useState<number>(
     DEFAULT_LOOKBACK_DAYS,
   );
 
   // ── Collapsible section state ───────────────────────────────────────────────
 
-  const [advancedCollapsed, setAdvancedCollapsed] = React.useState(true);
-  const [sectorCollapsed, setSectorCollapsed] = React.useState(true);
-  const [quantumCollapsed, setQuantumCollapsed] = React.useState(false);
+  const [advancedCollapsed, setAdvancedCollapsed] = useState(true);
+  const [sectorCollapsed, setSectorCollapsed] = useState(true);
+  const [quantumCollapsed, setQuantumCollapsed] = useState(false);
 
   // ── Validation errors ───────────────────────────────────────────────────────
 
-  const [errors, setErrors] = React.useState<FormErrors>({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
   // ── Hooks ───────────────────────────────────────────────────────────────────
 
@@ -334,7 +338,7 @@ export function ConstraintForm({
 
   // ── Budget management ───────────────────────────────────────────────────────
 
-  function handleBudgetChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleBudgetChange(e: ChangeEvent<HTMLInputElement>) {
     setBudgetInput(e.target.value);
   }
 
@@ -352,7 +356,7 @@ export function ConstraintForm({
     }
   }
 
-  function handleBudgetKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleBudgetKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
   }
 
@@ -420,15 +424,13 @@ export function ConstraintForm({
         "Min weight per asset cannot exceed max weight per asset.";
     }
 
-    if (
-      runQuantum &&
-      numAssetsToSelect > selectedAssets.length
-    ) {
+    if (runQuantum && numAssetsToSelect > selectedAssets.length) {
       newErrors.numAssetsToSelect = `Cannot select more assets (${numAssetsToSelect}) than available (${selectedAssets.length}).`;
     }
 
     if (lookbackDays < 30 || lookbackDays > 1825) {
-      newErrors.lookbackDays = "Lookback period must be between 30 and 1825 days.";
+      newErrors.lookbackDays =
+        "Lookback period must be between 30 and 1825 days.";
     }
 
     setErrors(newErrors);
@@ -437,7 +439,7 @@ export function ConstraintForm({
 
   // ── Submit ──────────────────────────────────────────────────────────────────
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
     if (!validate()) return;
@@ -487,7 +489,7 @@ export function ConstraintForm({
 
         <CardContent>
           <form onSubmit={handleSubmit} noValidate className="space-y-6">
-            {/* ── 1. Asset Selection ─────────────────────────────────────── */}
+            {/* ── 1. Asset Selection ─────────────────────────────────────────── */}
             <section aria-labelledby="assets-heading" className="space-y-3">
               <SectionHeader
                 icon={<TrendingUp className="h-4 w-4" />}
@@ -536,7 +538,7 @@ export function ConstraintForm({
 
             <Separator />
 
-            {/* ── 2. Budget ──────────────────────────────────────────────── */}
+            {/* ── 2. Budget ──────────────────────────────────────────────────── */}
             <section aria-labelledby="budget-heading" className="space-y-3">
               <SectionHeader
                 icon={<DollarSign className="h-4 w-4" />}
@@ -586,7 +588,7 @@ export function ConstraintForm({
 
             <Separator />
 
-            {/* ── 3. Return & Risk (collapsible) ─────────────────────────── */}
+            {/* ── 3. Return & Risk (collapsible) ─────────────────────────────── */}
             <section
               aria-labelledby="risk-return-heading"
               className="space-y-3"
@@ -669,7 +671,7 @@ export function ConstraintForm({
 
             <Separator />
 
-            {/* ── 4. Sector Constraints (collapsible) ────────────────────── */}
+            {/* ── 4. Sector Constraints (collapsible) ────────────────────────── */}
             <section
               aria-labelledby="sector-heading"
               className="space-y-3"
@@ -757,7 +759,7 @@ export function ConstraintForm({
 
             <Separator />
 
-            {/* ── 5. Quantum Settings ────────────────────────────────────── */}
+            {/* ── 5. Quantum Settings ─────────────────────────────────────────── */}
             <section
               aria-labelledby="quantum-heading"
               className="space-y-3"
@@ -881,7 +883,7 @@ export function ConstraintForm({
 
             <Separator />
 
-            {/* ── Submit ─────────────────────────────────────────────────── */}
+            {/* ── Submit ──────────────────────────────────────────────────────── */}
             <div className="space-y-3">
               {errors.general && (
                 <p className="text-xs text-destructive" role="alert">

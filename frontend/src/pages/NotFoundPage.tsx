@@ -1,5 +1,12 @@
 /**
  * 404 Not Found page.
+ *
+ * React 19.2 notes
+ * ────────────────
+ * • Uses the React 19 document-metadata pattern: `<title>` rendered inside
+ *   the component is automatically hoisted to `<head>` by React 19's built-in
+ *   metadata support — no external helmet library required.
+ * • No `import React` needed — the automatic JSX transform handles it.
  */
 
 import { Link } from "react-router-dom";
@@ -8,6 +15,9 @@ import { Home } from "lucide-react";
 export default function NotFoundPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+      {/* React 19: <title> hoisted to <head> automatically */}
+      <title>404 — Page Not Found | Portfolio Optimizer</title>
+
       <div className="text-center">
         <h1 className="mb-2 text-6xl font-bold text-muted-foreground">404</h1>
         <h2 className="mb-4 text-2xl font-semibold">Page Not Found</h2>

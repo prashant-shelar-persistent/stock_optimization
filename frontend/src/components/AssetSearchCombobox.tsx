@@ -10,6 +10,8 @@
  *   - Pressing Escape or clicking outside closes the dropdown
  *   - Keyboard navigation: ArrowUp / ArrowDown / Enter
  *
+ * React 19: uses named imports — no `import * as React` needed.
+ *
  * Usage:
  *   <AssetSearchCombobox
  *     selectedTickers={["AAPL", "MSFT"]}
@@ -18,7 +20,13 @@
  *   />
  */
 
-import * as React from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import { Search, Loader2, Plus } from "lucide-react";
 import { useAssetSearch } from "@/hooks/useAssetSearch";
 import { cn } from "@/lib/utils";
@@ -44,18 +52,18 @@ export function AssetSearchCombobox({
   placeholder = "Search ticker or company name…",
   className,
 }: AssetSearchComboboxProps) {
-  const [query, setQuery] = React.useState("");
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const { results, isLoading } = useAssetSearch(query);
 
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const listRef = React.useRef<HTMLUListElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Close dropdown when clicking outside
-  React.useEffect(() => {
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
         containerRef.current &&
@@ -70,7 +78,7 @@ export function AssetSearchCombobox({
   }, []);
 
   // Open dropdown when results arrive
-  React.useEffect(() => {
+  useEffect(() => {
     if (results.length > 0 && query.length > 0) {
       setIsOpen(true);
       setHighlightedIndex(-1);
@@ -83,14 +91,14 @@ export function AssetSearchCombobox({
   }, [results, isLoading, query]);
 
   // Scroll highlighted item into view
-  React.useEffect(() => {
+  useEffect(() => {
     if (highlightedIndex >= 0 && listRef.current) {
       const item = listRef.current.children[highlightedIndex] as HTMLElement;
       item?.scrollIntoView({ block: "nearest" });
     }
   }, [highlightedIndex]);
 
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleInputChange(e: ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
     setQuery(value);
     if (value.length === 0) {
@@ -107,7 +115,7 @@ export function AssetSearchCombobox({
     inputRef.current?.focus();
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (!isOpen) return;
 
     switch (e.key) {

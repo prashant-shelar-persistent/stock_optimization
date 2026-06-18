@@ -14,6 +14,11 @@
  * Props:
  *   progress — ordered list of AgentProgressMessage from uiStore
  *   isRunning — whether the optimization is still in progress
+ *
+ * React 19 migration notes:
+ *   - No forwardRef — refs are plain props in React 19
+ *   - React.ComponentType replaced with explicit ComponentProps pattern
+ *   - Removed React namespace prefix where not needed
  */
 
 import { cn } from "@/lib/utils";
@@ -30,6 +35,7 @@ import {
   GitCompare,
   MessageSquare,
   TrendingUp,
+  type LucideProps,
 } from "lucide-react";
 import type { AgentProgressMessage, AgentNodeName } from "@/types/api";
 
@@ -38,7 +44,7 @@ import type { AgentProgressMessage, AgentNodeName } from "@/types/api";
 interface NodeMeta {
   label: string;
   description: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: (props: LucideProps) => React.ReactNode;
 }
 
 const NODE_META: Record<AgentNodeName, NodeMeta> = {
@@ -213,11 +219,12 @@ export function AgentProgressPanel({
             "h-2",
             isRunning && progressPercent < 100 && "animate-pulse",
           )}
+          aria-label={`Pipeline progress: ${progressPercent}%`}
         />
       </div>
 
       {/* Pipeline steps */}
-      <ol className="space-y-2">
+      <ol className="space-y-2" aria-label="Agent pipeline steps">
         {PIPELINE_ORDER.map((nodeName, index) => {
           const meta = NODE_META[nodeName];
           const state = getNodeState(nodeName, progress);
@@ -235,6 +242,7 @@ export function AgentProgressPanel({
                   "bg-destructive/5 border border-destructive/20",
                 state.status === "pending" && "opacity-40",
               )}
+              aria-current={state.status === "running" ? "step" : undefined}
             >
               {/* Step number + status icon */}
               <div className="flex flex-col items-center gap-1 pt-0.5">
@@ -247,6 +255,7 @@ export function AgentProgressPanel({
                         ? "bg-green-500/30"
                         : "bg-border",
                     )}
+                    aria-hidden="true"
                   />
                 )}
               </div>
@@ -261,6 +270,7 @@ export function AgentProgressPanel({
                         ? "text-primary"
                         : "text-muted-foreground",
                     )}
+                    aria-hidden="true"
                   />
                   <span
                     className={cn(
@@ -273,7 +283,9 @@ export function AgentProgressPanel({
                   </span>
                   {state.timestamp && (
                     <span className="ml-auto text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                      {formatTimestamp(state.timestamp)}
+                      <time dateTime={state.timestamp}>
+                        {formatTimestamp(state.timestamp)}
+                      </time>
                     </span>
                   )}
                 </div>

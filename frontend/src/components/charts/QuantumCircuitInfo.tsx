@@ -13,6 +13,9 @@
  *   circuitDepth — circuit depth (QAOA only)
  *   solveTimeMs  — solve time in milliseconds
  *   selectedAssets — list of selected ticker symbols
+ *
+ * React 19.2: Uses function components with typed props (no forwardRef needed).
+ * JSX transform is handled automatically via react-jsx in tsconfig.
  */
 
 import { Badge } from "@/components/ui/badge";

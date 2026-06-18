@@ -11,6 +11,9 @@
  *   delta       — optional delta vs baseline (shown with +/- color)
  *   description — optional tooltip/description text
  *   highlight   — if true, renders with a highlighted border
+ *
+ * React 19.2: Uses function components with typed props (no forwardRef needed).
+ * JSX transform is handled automatically via react-jsx in tsconfig.
  */
 
 import {
