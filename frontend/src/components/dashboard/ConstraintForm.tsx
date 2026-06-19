@@ -15,9 +15,14 @@
  *   - No forwardRef — refs are plain props in React 19
  *   - useId() for stable ARIA IDs
  *   - useActionState() for form submission state management
- *   - useFormStatus() (react-dom) drives SubmitButton disabled/loading state
  *   - React.ComponentProps<"element"> instead of React.HTMLAttributes
  *   - Type-only imports use `import type`
+ *
+ * NOTE: This form has NO submit button inside it.
+ *   The "Run Optimization" button lives in the sticky footer of DashboardPage
+ *   (outside the ScrollArea) and references this form via form="constraint-form".
+ *   This prevents the duplicate button issue where a button inside the scrollable
+ *   area would appear alongside the sticky footer button.
  */
 
 import {
@@ -28,10 +33,8 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
 } from "react";
-import { useFormStatus } from "react-dom";
 import { useOptimize } from "@/hooks/useOptimize";
 import { useAssetSearch } from "@/hooks/useAssetSearch";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -58,7 +61,6 @@ import {
   Info,
   Loader2,
   Zap,
-  BarChart2,
   Target,
   TrendingUp,
 } from "lucide-react";
@@ -451,42 +453,6 @@ function ObjectiveRow({ obj, onChange }: ObjectiveRowProps) {
   );
 }
 
-// ── Submit button (uses useFormStatus — must be rendered inside <form>) ────────
-
-/**
- * SubmitButton — reads pending state directly from the nearest ancestor <form>
- * via React 19's `useFormStatus` hook (react-dom). This avoids prop-drilling
- * `isPending` from `useActionState` down to the button.
- *
- * IMPORTANT: This component must be rendered as a *child* of the `<form>`
- * element for `useFormStatus` to observe the form's submission state.
- */
-function SubmitButton() {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button
-      type="submit"
-      disabled={pending}
-      className="w-full gap-2"
-      size="default"
-      aria-busy={pending}
-    >
-      {pending ? (
-        <>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Running Optimization…
-        </>
-      ) : (
-        <>
-          <BarChart2 className="h-4 w-4" />
-          Run Optimization
-        </>
-      )}
-    </Button>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
@@ -505,7 +471,6 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
 
   // ── Core state ──
   const [tickers, setTickers] = useState<string[]>(DEFAULT_TICKERS);
-  const [_budget, setBudget] = useState(DEFAULT_BUDGET);
   const [budgetInput, setBudgetInput] = useState(DEFAULT_BUDGET_DISPLAY);
   const [budgetTouched, setBudgetTouched] = useState(false);
 
@@ -543,9 +508,9 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
 
   // ── useActionState for form submission (React 19) ──
   // `formAction` is passed to <form action={...}>.
-  // The third value (pending) is intentionally unused here — the SubmitButton
-  // sub-component reads pending state via useFormStatus() instead, which is
-  // the idiomatic React 19 pattern for driving button disabled/loading state.
+  // The submit button lives outside this form (sticky footer in DashboardPage)
+  // and uses form="constraint-form" to trigger submission.
+  // This design avoids having a duplicate button inside the scrollable area.
   const [_actionState, formAction] = useActionState(
     async (_prevState: null, formData: FormData) => {
       void formData; // FormData not used directly — we read from state
@@ -610,8 +575,6 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
   function handleBudgetChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
     setBudgetInput(raw);
-    const numeric = parseBudget(raw);
-    if (!isNaN(numeric) && numeric > 0) setBudget(numeric);
     if (budgetTouched) {
       const errMsg = validateBudgetInput(raw);
       setErrors((prev) => {
@@ -636,7 +599,6 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
       setErrors((prev) => ({ ...prev, budget: errMsg }));
     } else {
       const numeric = parseBudget(budgetInput);
-      setBudget(numeric);
       setBudgetInput(numeric.toLocaleString("en-US", { maximumFractionDigits: 2 }));
       setErrors((prev) => {
         const next = { ...prev };
@@ -1063,15 +1025,6 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
         )}
       </div>
 
-      <Separator />
-
-      {/* ── Submit ── */}
-      {/* SubmitButton is a dedicated sub-component so that useFormStatus()
-          can read the pending state from this <form>'s action. Per React 19
-          rules, useFormStatus must be called inside a component that is
-          rendered *within* the <form> element — not in the form component
-          itself. */}
-      <SubmitButton />
     </form>
   );
 }

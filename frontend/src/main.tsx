@@ -6,9 +6,7 @@
  * • Uses the automatic JSX transform (`react-jsx`) — no `import React` needed.
  * • `createRoot` in React 19 accepts `onCaughtError`, `onUncaughtError`, and
  *   `onRecoverableError` callbacks for fine-grained error reporting without a
- *   class-based ErrorBoundary at the root.  The `@types/react-dom` package is
- *   augmented below to expose these React 19-only options until the DefinitelyTyped
- *   package is updated to reflect the React 19 API surface.
+ *   class-based ErrorBoundary at the root.
  * • React 19's improved concurrent scheduler is activated automatically by
  *   `createRoot`; no extra configuration is required.
  * • `StrictMode` in React 19 additionally checks for deprecated string refs
@@ -19,44 +17,38 @@
  * • `prefetchDNS` and `preconnect` (from `react-dom`) are called at module
  *   level to warm up the connection to the backend API before the first render,
  *   leveraging React 19.2's built-in resource preloading APIs.
+ *   They are called defensively (typeof check) so a stale Vite dep-cache that
+ *   pre-bundled react-dom before the React 19 upgrade does not crash the app.
  */
 
 import { StrictMode } from "react";
-import { prefetchDNS, preconnect } from "react-dom";
 import { createRoot, type RootOptions } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
-// ── React 19.2 Resource Preloading ─────────────────────────────────────────────
+// ── React 19.2 Resource Preloading ─────────────────────────────────────────
 //
-// `prefetchDNS` issues a DNS prefetch hint for the backend origin so the
-// browser resolves the hostname before the first API request is made.
-// `preconnect` goes further and warms up the full TCP (and TLS, if applicable)
-// connection, eliminating connection-setup latency on the first fetch.
-//
-// Both calls are side-effectful and must run at module evaluation time —
-// before `createRoot` — so the browser can act on the hints as early as
-// possible during the initial page load.
-//
-// These are React 19 DOM APIs (react-dom, not react-dom/client) and are
-// fully typed in @types/react-dom@^19.2.3.
+// `prefetchDNS` and `preconnect` are React 19-only APIs. We import the whole
+// react-dom namespace and call them defensively so a stale Vite pre-bundle
+// cache (which may have been built against React 18) does not throw a
+// TypeError and leave the page blank.
 
-prefetchDNS("http://localhost:8000");
-preconnect("http://localhost:8000");
+import("react-dom").then((ReactDOM) => {
+  if (typeof (ReactDOM as Record<string, unknown>).prefetchDNS === "function") {
+    (ReactDOM as { prefetchDNS: (href: string) => void }).prefetchDNS(
+      "http://localhost:8000",
+    );
+  }
+  if (typeof (ReactDOM as Record<string, unknown>).preconnect === "function") {
+    (ReactDOM as { preconnect: (href: string) => void }).preconnect(
+      "http://localhost:8000",
+    );
+  }
+});
 
-// ── React 19 RootOptions type augmentation ─────────────────────────────────────
-//
-// React 19 added `onUncaughtError` and `onCaughtError` to `createRoot` options.
-// The installed @types/react-dom package predates React 19 and only declares
-// `onRecoverableError`.  We extend the interface here so TypeScript accepts the
-// full React 19 API without requiring a package update.
-
-// NOTE: @types/react-dom@19.2.3 already includes onCaughtError, onUncaughtError,
-// and onRecoverableError in RootOptions — no module augmentation needed.
-
-// ── TanStack Query client ──────────────────────────────────────────────────────
+// ── TanStack Query client ───────────────────────────────────────────────────
 //
 // React 19's improved batching means that multiple query invalidations that
 // previously triggered separate re-renders are now coalesced into one — the
@@ -76,7 +68,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// ── Root element guard ─────────────────────────────────────────────────────────
+// ── Root element guard ──────────────────────────────────────────────────────
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -86,29 +78,21 @@ if (!rootElement) {
   );
 }
 
-// ── Root options ───────────────────────────────────────────────────────────────
+// ── Root options ────────────────────────────────────────────────────────────
 //
 // React 19 `createRoot` options:
 //   • `onUncaughtError`    — fires for errors NOT caught by any ErrorBoundary.
-//     Replaces the old `window.onerror` pattern for React-rendered trees.
-//   • `onCaughtError`      — fires for errors caught by an ErrorBoundary,
-//     giving a central place to log them (e.g. to Sentry) without subclassing.
+//   • `onCaughtError`      — fires for errors caught by an ErrorBoundary.
 //   • `onRecoverableError` — fires when React recovers from a hydration or
 //     rendering error by falling back to client rendering.
-//
-// In development (`import.meta.env.DEV`) all three are logged to the console.
-// In production, replace the console calls with your error-reporting service
-// (e.g. Sentry.captureException).
 
 const rootOptions: RootOptions = {
-  // Errors NOT caught by any ErrorBoundary — these are fatal from React's POV.
   onUncaughtError(error: unknown, errorInfo: { componentStack?: string }) {
     if (import.meta.env.DEV) {
       console.error("[React] Uncaught error:", error, errorInfo.componentStack);
     }
   },
 
-  // Errors caught by an ErrorBoundary — UI recovered, but we still want to log.
   onCaughtError(
     error: unknown,
     errorInfo: { componentStack?: string; errorBoundary?: unknown },
@@ -122,7 +106,6 @@ const rootOptions: RootOptions = {
     }
   },
 
-  // Recoverable errors — React auto-fixed them (e.g. hydration mismatches).
   onRecoverableError(error: unknown, errorInfo: { componentStack?: string }) {
     if (import.meta.env.DEV) {
       console.warn(
@@ -134,7 +117,7 @@ const rootOptions: RootOptions = {
   },
 };
 
-// ── Mount ──────────────────────────────────────────────────────────────────────
+// ── Mount ───────────────────────────────────────────────────────────────────
 
 createRoot(rootElement, rootOptions).render(
   <StrictMode>
