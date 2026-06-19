@@ -54,7 +54,6 @@ import {
 import { useRunDetail } from "@/hooks/useRunDetail";
 import { AgentProgressPanel } from "@/components/dashboard/AgentProgressPanel";
 import { ComparisonDashboard } from "@/components/dashboard/ComparisonDashboard";
-import { FrontierReportViewer } from "@/components/dashboard/FrontierReportViewer";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -485,12 +484,7 @@ export default function RunDetailPage() {
               {run.status === "failed" && <ErrorPanel run={run} />}
 
               {run.status === "completed" && run.classical_result && (
-                <>
-                  <ComparisonDashboard result={run} />
-                  {run.frontier_report && (
-                    <FrontierReportViewer report={run.frontier_report} />
-                  )}
-                </>
+                <ComparisonDashboard result={run} />
               )}
 
               {run.status === "completed" && !run.classical_result && (

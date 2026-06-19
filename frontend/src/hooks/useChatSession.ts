@@ -210,7 +210,7 @@ export function useChatSession(): UseChatSessionReturn {
               // the full session including the assistant's first reply.
               // Reconstruct the message list from the session response.
               setMessages(session.messages);
-              setExtractedSlots(session.extracted_slots);
+              setExtractedSlots(session.extracted_slots ?? {});
               setSessionStatus(session.status);
 
               if (session.status === "pending_confirmation") {
@@ -344,11 +344,11 @@ export function useChatSession(): UseChatSessionReturn {
 
         // Then restore the full message history and slots
         setMessages(session.messages);
-        setExtractedSlots(session.extracted_slots);
+        setExtractedSlots(session.extracted_slots ?? {});
         setSessionStatus(session.status);
 
         if (session.status === "pending_confirmation") {
-          setPendingPayload(session.extracted_slots as ExtractedSlots);
+          setPendingPayload(session.extracted_slots);
         }
 
         return true;

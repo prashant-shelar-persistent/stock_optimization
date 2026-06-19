@@ -343,8 +343,7 @@ export type ChatSessionStatus =
   | "collecting"
   | "pending_confirmation"
   | "confirmed"
-  | "expired"
-  | "abandoned";
+  | "expired";
 
 export interface ChatMessage {
   role: ChatRole;
@@ -384,10 +383,15 @@ export interface ChatSession {
   session_id: string;
   status: ChatSessionStatus;
   messages: ChatMessage[];
-  extracted_slots: ExtractedSlots;
+  /** Partial or complete extracted slot values. Null when no slots extracted yet. */
+  extracted_slots: ExtractedSlots | null;
   run_id: string | null;
   created_at: string;
   updated_at: string;
+  /** UTC timestamp after which the session is considered expired. */
+  expires_at: string;
+  /** The most recent assistant message text. Null when no assistant turns exist yet. */
+  assistant_message: string | null;
 }
 
 export interface CreateChatSessionRequest {

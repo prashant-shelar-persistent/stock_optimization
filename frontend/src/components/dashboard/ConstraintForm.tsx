@@ -525,7 +525,7 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
   );
 
   // ── Frontier config ──
-  const [frontierEnabled, setFrontierEnabled] = useState(false);
+  const [frontierEnabled, setFrontierEnabled] = useState(true);
   const [frontierX, setFrontierX] = useState<FrontierMeasureName>("volatility");
   const [frontierY, setFrontierY] = useState<FrontierMeasureName>("return");
   const [frontierPoints, setFrontierPoints] = useState(20);
@@ -885,7 +885,7 @@ export function ConstraintForm({ onRunStarted }: ConstraintFormProps) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              The frontier report will appear in the run detail view after completion.
+              The frontier report will appear in the results panel after optimization completes.
             </p>
           </div>
         )}

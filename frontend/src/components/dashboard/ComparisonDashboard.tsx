@@ -54,6 +54,7 @@ import { WeightsTable } from "@/components/charts/WeightsTable";
 import { MetricsCard } from "@/components/charts/MetricsCard";
 import { QuantumCircuitInfo } from "@/components/charts/QuantumCircuitInfo";
 import { LLMExplanationPanel } from "@/components/dashboard/LLMExplanationPanel";
+import { FrontierReportViewer } from "@/components/dashboard/FrontierReportViewer";
 import {
   TrendingUp,
   TrendingDown,
@@ -681,6 +682,36 @@ export function ComparisonDashboard({ result }: ComparisonDashboardProps) {
         explanation={result.llm_explanation}
         isLoading={isExplanationLoading}
       />
+
+      {/* ── Efficient Frontier ── */}
+      {result.frontier_report ? (
+        <FrontierReportViewer report={result.frontier_report} />
+      ) : result.status === "completed" && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              Efficient Frontier
+            </CardTitle>
+            <CardDescription>
+              Pareto-optimal trade-off between risk and return measures
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/20 px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-foreground/90">
+                  Efficient Frontier not computed
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Enable the <strong>Efficient Frontier</strong> toggle in the constraint form before running optimization to trace the Pareto frontier between two portfolio measures (e.g. Volatility vs Expected Return).
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
