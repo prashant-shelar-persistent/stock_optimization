@@ -12,8 +12,6 @@ Tests cover:
 - invalidate_cache helper
 """
 
-from __future__ import annotations
-
 import pickle
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch

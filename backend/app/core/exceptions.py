@@ -5,8 +5,6 @@ handlers can return consistent JSON error responses with ``error_code``,
 ``message``, and ``details`` fields.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 

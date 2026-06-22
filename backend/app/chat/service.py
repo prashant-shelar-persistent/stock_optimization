@@ -63,8 +63,6 @@ Mapping:
     ``ChatSlotOverrideError``            → HTTP 422
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -203,7 +201,7 @@ class ChatService:
     async def create_session(
         self,
         initial_message: str | None = None,
-    ) -> ChatSessionResponse:
+    ) -> "ChatSessionResponse":
         """Create a new chat session and optionally process the first message.
 
         If ``initial_message`` is provided, the LLM slot filler is invoked
@@ -264,7 +262,7 @@ class ChatService:
         self,
         session_id: str,
         content: str,
-    ) -> SendMessageResponse:
+    ) -> "SendMessageResponse":
         """Append a user message and return the assistant's reply.
 
         Fetches the session, validates it is in an active state, appends the
@@ -311,7 +309,7 @@ class ChatService:
         self,
         session_id: str,
         slot_overrides: dict[str, Any] | None = None,
-    ) -> ConfirmSessionResponse:
+    ) -> "ConfirmSessionResponse":
         """Confirm the extracted payload and dispatch the optimization run.
 
         Validates that the session is in ``pending_confirmation`` state,
@@ -405,7 +403,7 @@ class ChatService:
             status="confirmed",
         )
 
-    async def get_session(self, session_id: str) -> ChatSessionResponse:
+    async def get_session(self, session_id: str) -> "ChatSessionResponse":
         """Fetch a session by UUID, performing a lazy expiry check.
 
         If the session's ``expires_at`` has passed and it is not already in
@@ -434,7 +432,7 @@ class ChatService:
 
     # ── Private helpers ────────────────────────────────────────────────────────
 
-    async def _get_session_or_raise(self, session_id: str) -> ChatSession:
+    async def _get_session_or_raise(self, session_id: str) -> "ChatSession":
         """Fetch a ``ChatSession`` by UUID or raise ``ChatSessionNotFoundError``.
 
         Args:
@@ -454,7 +452,7 @@ class ChatService:
             raise ChatSessionNotFoundError(session_id=session_id)
         return session
 
-    def _assert_accepting_messages(self, session: ChatSession) -> None:
+    def _assert_accepting_messages(self, session: ChatSession) -> "None":
         """Raise an appropriate exception if the session cannot accept messages.
 
         A session accepts messages only when it is in ``collecting`` or
@@ -495,7 +493,7 @@ class ChatService:
         self,
         session: ChatSession,
         content: str,
-    ) -> None:
+    ) -> "None":
         """Append a user message, call the LLM, and append the assistant reply.
 
         This is the core slot-filling loop:
@@ -745,7 +743,7 @@ class ChatService:
         self,
         session_id: str,
         slot_overrides: dict[str, Any],
-    ) -> None:
+    ) -> "None":
         """Validate the ``slot_overrides`` dict before applying it.
 
         Enforces two safety rules:
@@ -810,7 +808,7 @@ class ChatService:
         self,
         session: ChatSession,
         slot_overrides: dict[str, Any] | None = None,
-    ) -> OptimizationRequest:
+    ) -> "OptimizationRequest":
         """Build an :class:`~app.schemas.requests.OptimizationRequest` from session slots.
 
         Merges the session's ``extracted_slots`` with any provided overrides
@@ -921,7 +919,7 @@ class ChatService:
         return run_id
 
     @staticmethod
-    def _to_response(session: ChatSession) -> ChatSessionResponse:
+    def _to_response(session: ChatSession) -> "ChatSessionResponse":
         """Convert a :class:`~app.db.models.ChatSession` ORM instance to a response schema.
 
         Uses ``model_validate`` with ``from_attributes=True`` (configured on
@@ -946,7 +944,7 @@ def get_chat_service(
     session_ttl_hours: int | None = None,
     max_messages_per_session: int | None = None,
     max_slot_override_keys: int | None = None,
-) -> ChatService:
+) -> "ChatService":
     """Construct a :class:`ChatService` instance.
 
     This factory is provided as a convenience for the FastAPI router.  It

@@ -54,8 +54,6 @@ Usage::
     print(result.metrics.sharpe_ratio)
 """
 
-from __future__ import annotations
-
 import time
 
 import numpy as np
@@ -84,7 +82,7 @@ def run_vqe(
     num_assets_to_select: int,
     num_layers: int = 2,
     max_iterations: int = 100,
-) -> VQEResult:
+) -> "VQEResult":
     """Run VQE-style optimization using PennyLane to solve the asset selection QUBO.
 
     Constructs a parameterised quantum circuit (hardware-efficient ansatz),

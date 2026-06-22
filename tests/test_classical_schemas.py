@@ -6,8 +6,6 @@ Tests cover:
 - ClassicalOptimizationResult: construction and field types
 """
 
-from __future__ import annotations
-
 import pytest
 from pydantic import ValidationError
 

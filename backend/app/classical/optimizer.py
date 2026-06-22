@@ -60,8 +60,6 @@ Usage::
     )
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -280,7 +278,7 @@ def run_markowitz_mvo(
     covariance_matrix: np.ndarray,
     budget: float,
     constraints: dict[str, Any],
-) -> ClassicalResult:
+) -> "ClassicalResult":
     """Run Markowitz Mean-Variance Optimization.
 
     Args:

@@ -14,8 +14,6 @@ Design notes:
       error handling on the frontend.
 """
 
-from __future__ import annotations
-
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
@@ -57,7 +55,7 @@ async def list_runs(
             "Omit to return all statuses."
         ),
     ),
-) -> PaginatedRunsResponse:
+) -> "PaginatedRunsResponse":
     """Return paginated run history, optionally filtered by status."""
     offset = (page - 1) * page_size
 
@@ -126,7 +124,7 @@ async def list_runs(
 async def get_run_status(
     run_id: str,
     db: DbDep,
-) -> RunStatusResponse:
+) -> "RunStatusResponse":
     """Return the current status of a specific run without full result data.
 
     This endpoint is optimised for polling: it returns only the lifecycle
@@ -173,7 +171,7 @@ async def get_run_status(
 async def get_run(
     run_id: str,
     db: DbDep,
-) -> OptimizationRunDetail:
+) -> "OptimizationRunDetail":
     """Return the full detail of a specific run.
 
     For runs that are still pending or running, the result fields

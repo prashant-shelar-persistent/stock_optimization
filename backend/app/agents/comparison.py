@@ -8,8 +8,6 @@ external services. The LLM explanation node uses the comparison summary
 as context for generating a natural-language narrative.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from app.core.logging import get_logger
@@ -28,7 +26,7 @@ _MARGINAL_SHARPE_DELTA = 0.0
 def compute_comparison(
     classical_result: dict[str, Any] | None,
     quantum_result: dict[str, Any] | None,
-) -> ComparisonSummary:
+) -> "ComparisonSummary":
     """Compute comparison metrics between classical and quantum results.
 
     Computes per-algorithm (QAOA, VQE) differences in Sharpe ratio,

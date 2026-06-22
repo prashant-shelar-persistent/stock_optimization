@@ -13,8 +13,6 @@ Tests cover:
 - compute_approximation_ratio: ratio computation
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

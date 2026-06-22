@@ -23,8 +23,6 @@ Error handling:
     entire run.
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -38,14 +36,14 @@ logger = get_logger(__name__)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _record_timing(state: AgentState, node_name: str, elapsed_ms: float) -> None:
+def _record_timing(state: AgentState, node_name: str, elapsed_ms: float) -> "None":
     """Record node execution time in the state (mutates in place)."""
     timings: dict[str, float] = dict(state.get("node_timings_ms") or {})
     timings[node_name] = elapsed_ms
     state["node_timings_ms"] = timings  # type: ignore[typeddict-unknown-key]
 
 
-def _record_completed(state: AgentState, node_name: str) -> None:
+def _record_completed(state: AgentState, node_name: str) -> "None":
     """Append node_name to the completed_nodes list in state."""
     completed: list[str] = list(state.get("completed_nodes") or [])
     if node_name not in completed:
@@ -56,7 +54,7 @@ def _record_completed(state: AgentState, node_name: str) -> None:
 # ── Data fetch node ───────────────────────────────────────────────────────────
 
 
-def data_fetch_node(state: AgentState) -> AgentState:
+def data_fetch_node(state: AgentState) -> "AgentState":
     """Fetch historical price data and compute returns/covariance.
 
     Uses yfinance with Redis caching. Populates:
@@ -136,7 +134,7 @@ def data_fetch_node(state: AgentState) -> AgentState:
 # ── Constraint validation node ────────────────────────────────────────────────
 
 
-def constraint_validation_node(state: AgentState) -> AgentState:
+def constraint_validation_node(state: AgentState) -> "AgentState":
     """Validate and normalise optimization constraints.
 
     Checks for logical consistency (e.g. min_return not exceeding max
@@ -225,7 +223,7 @@ def constraint_validation_node(state: AgentState) -> AgentState:
 # ── Classical optimization node ───────────────────────────────────────────────
 
 
-def classical_optimization_node(state: AgentState) -> AgentState:
+def classical_optimization_node(state: AgentState) -> "AgentState":
     """Run Markowitz Mean-Variance Optimization via CVXPY.
 
     Populates classical_result with weights, metrics, and solver status.
@@ -304,7 +302,7 @@ def classical_optimization_node(state: AgentState) -> AgentState:
 # ── Quantum dispatch node ─────────────────────────────────────────────────────
 
 
-def quantum_dispatch_node(state: AgentState) -> AgentState:
+def quantum_dispatch_node(state: AgentState) -> "AgentState":
     """Run QAOA (Qiskit) and VQE-style (PennyLane) quantum optimization.
 
     Converts the asset selection problem to QUBO and runs both quantum
@@ -387,7 +385,7 @@ def quantum_dispatch_node(state: AgentState) -> AgentState:
 # ── Comparison node ───────────────────────────────────────────────────────────
 
 
-def comparison_node(state: AgentState) -> AgentState:
+def comparison_node(state: AgentState) -> "AgentState":
     """Compare classical and quantum optimization results.
 
     Computes Sharpe ratio improvements, return/volatility differences,
@@ -452,7 +450,7 @@ def comparison_node(state: AgentState) -> AgentState:
 # ── LLM explanation node ──────────────────────────────────────────────────────
 
 
-def llm_explanation_node(state: AgentState) -> AgentState:
+def llm_explanation_node(state: AgentState) -> "AgentState":
     """Generate a natural-language explanation of the optimization results.
 
     Uses GPT-4o if OPENAI_API_KEY is configured, otherwise falls back to
@@ -521,7 +519,7 @@ def llm_explanation_node(state: AgentState) -> AgentState:
 # ── Frontier computation node ──────────────────────────────────────────────────
 
 
-def frontier_computation_node(state: AgentState) -> AgentState:
+def frontier_computation_node(state: AgentState) -> "AgentState":
     """Compute the Pareto frontier between two user-selected measures.
 
     This node runs ONLY when the request includes a non-null

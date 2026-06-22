@@ -9,8 +9,6 @@ Provides:
 - AgentState builder helpers for agent graph tests
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import UTC, datetime
 from typing import Any

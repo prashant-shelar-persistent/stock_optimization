@@ -27,8 +27,6 @@ Prompt design principles
   only use symbols the user explicitly mentioned.
 """
 
-from __future__ import annotations
-
 import json
 from typing import Any
 

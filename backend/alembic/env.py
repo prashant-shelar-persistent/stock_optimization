@@ -4,8 +4,6 @@ Supports async SQLAlchemy (asyncpg driver) and reads the database URL
 from the application settings so it stays in sync with the app config.
 """
 
-from __future__ import annotations
-
 import asyncio
 from logging.config import fileConfig
 

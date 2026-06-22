@@ -18,8 +18,6 @@ Usage::
     print(data.sector_map)
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import pickle
@@ -101,7 +99,7 @@ class MarketData:
 def fetch_market_data(
     tickers: list[str],
     lookback_days: int = 365,
-) -> MarketData:
+) -> "MarketData":
     """Fetch market data for the given tickers with Redis caching.
 
     Args:
@@ -497,7 +495,7 @@ def _get_from_cache(cache_key: str) -> MarketData | None:
     return None
 
 
-def _set_in_cache(cache_key: str, market_data: MarketData) -> None:
+def _set_in_cache(cache_key: str, market_data: MarketData) -> "None":
     """Store a MarketData object in Redis cache with TTL."""
     try:
         import redis

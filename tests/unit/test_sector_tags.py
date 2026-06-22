@@ -10,8 +10,6 @@ Tests cover:
 - GICS_SECTORS: contains all 11 GICS sectors
 """
 
-from __future__ import annotations
-
 import pytest
 
 from app.data.sector_tags import (

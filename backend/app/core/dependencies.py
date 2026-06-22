@@ -16,8 +16,6 @@ Lifecycle:
       rolled back on exception, and always closed in the ``finally`` block.
 """
 
-from __future__ import annotations
-
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
@@ -31,7 +29,7 @@ from app.core.config import Settings, get_settings
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 
-def get_app_settings() -> Settings:
+def get_app_settings() -> "Settings":
     """FastAPI dependency that returns the cached Settings singleton.
 
     Uses ``lru_cache`` under the hood (via ``get_settings``) so the
@@ -123,7 +121,7 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 
 
-async def close_redis() -> None:
+async def close_redis() -> "None":
     """Close the global Redis connection pool.
 
     Call this in the FastAPI lifespan shutdown handler (``main.py``) to

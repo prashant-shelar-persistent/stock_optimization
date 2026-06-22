@@ -4,8 +4,6 @@ Provides reusable numpy arrays, DataFrames, and schema objects that are
 used across multiple test files.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import pytest

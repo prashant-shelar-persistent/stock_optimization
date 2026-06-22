@@ -21,8 +21,6 @@ Design notes:
       load balancers can remove the instance from rotation.
 """
 
-from __future__ import annotations
-
 import asyncio
 from typing import Literal
 
@@ -69,7 +67,7 @@ class HealthResponse(BaseModel):
         503: {"description": "Application is unhealthy — all services are down"},
     },
 )
-async def health_check(response: Response) -> HealthResponse:
+async def health_check(response: Response) -> "HealthResponse":
     """Check the health of all application dependencies.
 
     Runs all three checks concurrently to minimise latency. Each check
@@ -169,7 +167,7 @@ async def _check_celery() -> Literal["up", "down"]:
     try:
         from app.workers.celery_app import celery_app  # noqa: PLC0415
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _ping() -> list:  # type: ignore[type-arg]
             return celery_app.control.ping(timeout=_CHECK_TIMEOUT_SECONDS)

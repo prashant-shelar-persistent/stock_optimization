@@ -23,8 +23,6 @@ Tests cover:
 20. num_assets_to_select > len(tickers) returns 422
 """
 
-from __future__ import annotations
-
 import uuid
 from unittest.mock import MagicMock, patch
 

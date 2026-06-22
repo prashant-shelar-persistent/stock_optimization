@@ -11,8 +11,6 @@ These tests exercise real code paths (no mocking) and verify that the
 output shapes, types, and values are correct.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

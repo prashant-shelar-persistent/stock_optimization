@@ -23,8 +23,6 @@ Tests cover:
 20. Progress callback is invoked for each node
 """
 
-from __future__ import annotations
-
 import uuid
 from typing import Any
 from unittest.mock import MagicMock, patch

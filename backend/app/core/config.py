@@ -4,8 +4,6 @@ All secrets and environment-specific values are loaded from environment
 variables or a .env file. Never hardcode secrets in source code.
 """
 
-from __future__ import annotations
-
 from functools import lru_cache
 
 from pydantic import Field
@@ -127,7 +125,7 @@ class Settings(BaseSettings):
 
 
 @lru_cache(maxsize=1)
-def get_settings() -> Settings:
+def get_settings() -> "Settings":
     """Return a cached singleton Settings instance.
 
     Using lru_cache ensures the .env file is read only once per process.

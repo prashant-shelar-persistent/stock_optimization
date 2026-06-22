@@ -16,8 +16,6 @@ The ``quantum`` queue has lower concurrency to prevent resource exhaustion from
 simultaneous quantum simulations.
 """
 
-from __future__ import annotations
-
 from celery import Celery
 from celery.signals import worker_ready, worker_shutdown
 

@@ -10,8 +10,6 @@ Phase 1 additions:
     - OptimizationRunDetail gains a `frontier_report` field.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 

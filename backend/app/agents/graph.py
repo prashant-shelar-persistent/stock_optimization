@@ -39,8 +39,6 @@ Usage::
     )
 """
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -62,7 +60,7 @@ ProgressCallback = Callable[[str, str, str], None]
 
 def _make_graph(
     progress_callback: ProgressCallback | None = None,
-) -> Any:
+) -> "Any":
     """Build and compile the LangGraph optimization graph.
 
     Args:
@@ -95,7 +93,7 @@ def _make_graph(
            set ``state["error"]`` (for fatal errors) or raised an exception.
         """
 
-        def wrapped(state: AgentState) -> AgentState:
+        def wrapped(state: AgentState) -> "AgentState":
             # Skip execution if a fatal error was already set by a prior node
             if state.get("error") and state.get("failed_node"):
                 # Only skip if this is not the node that set the error
@@ -400,7 +398,7 @@ async def run_agent_graph(
     run_id: str,
     request: OptimizationRequest,
     progress_callback: ProgressCallback | None = None,
-) -> OptimizationRunDetail:
+) -> "OptimizationRunDetail":
     """Execute the full optimization agent graph.
 
     Runs the LangGraph pipeline in a thread pool executor to avoid
@@ -444,7 +442,7 @@ async def run_agent_graph(
     )
 
     # Run synchronous LangGraph in thread pool to avoid blocking event loop
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     final_state: AgentState = await loop.run_in_executor(
         None,
         lambda: compiled_graph.invoke(initial_state),
@@ -467,7 +465,7 @@ def _state_to_run_detail(
     run_id: str,
     request: OptimizationRequest,
     state: AgentState,
-) -> OptimizationRunDetail:
+) -> "OptimizationRunDetail":
     """Convert the final agent state to an OptimizationRunDetail response.
 
     Args:

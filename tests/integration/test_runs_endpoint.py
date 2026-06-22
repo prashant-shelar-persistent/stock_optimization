@@ -23,8 +23,6 @@ Tests cover:
 20. GET /api/v1/runs — total count is correct
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import UTC, datetime
 

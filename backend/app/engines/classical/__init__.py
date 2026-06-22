@@ -17,8 +17,6 @@ Usage::
     print(result.weights)
     print(result.sharpe_ratio)
 """
-from __future__ import annotations
-
 from app.engines.classical.optimizer import ClassicalOptimizer
 from app.engines.classical.schemas import (
     ClassicalOptimizationInput,

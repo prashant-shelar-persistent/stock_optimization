@@ -42,8 +42,8 @@ Usage::
         country="United States",
     )
 """
-
 from __future__ import annotations
+
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -177,7 +177,7 @@ class PriceSeriesSchema(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_lengths_match(self) -> PriceSeriesSchema:
+    def validate_lengths_match(self) -> "PriceSeriesSchema":
         """Ensure dates and prices have the same length."""
         if len(self.dates) != len(self.prices):
             raise ValueError(
@@ -209,7 +209,7 @@ class ReturnSeriesSchema(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_lengths_match(self) -> ReturnSeriesSchema:
+    def validate_lengths_match(self) -> "ReturnSeriesSchema":
         """Ensure dates and returns have the same length."""
         if len(self.dates) != len(self.returns):
             raise ValueError(
@@ -237,7 +237,7 @@ class CovarianceMatrixSchema(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_matrix_shape(self) -> CovarianceMatrixSchema:
+    def validate_matrix_shape(self) -> "CovarianceMatrixSchema":
         """Ensure the matrix is square and matches the number of tickers."""
         n = len(self.tickers)
         if len(self.matrix) != n:
@@ -317,7 +317,7 @@ class MarketDataSchema(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_expected_returns_length(self) -> MarketDataSchema:
+    def validate_expected_returns_length(self) -> "MarketDataSchema":
         """Ensure expected_returns has one entry per valid ticker."""
         if len(self.expected_returns) != len(self.valid_tickers):
             raise ValueError(
@@ -441,7 +441,7 @@ class DataFetchRequestSchema(BaseModel):
 def market_data_to_schema(
     market_data: MarketData,
     include_series: bool = False,
-) -> MarketDataSchema:
+) -> "MarketDataSchema":
     """Convert an internal ``MarketData`` dataclass to a ``MarketDataSchema``.
 
     Args:
@@ -539,7 +539,7 @@ def market_data_to_schema(
 def compute_sector_summary(
     weights: dict[str, float],
     sector_map: dict[str, str],
-) -> SectorSummarySchema:
+) -> "SectorSummarySchema":
     """Compute a sector allocation summary for a portfolio.
 
     Args:

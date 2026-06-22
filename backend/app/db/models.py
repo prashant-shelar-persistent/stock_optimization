@@ -20,8 +20,6 @@ Design decisions:
       the database level, providing a safety net beyond application validation.
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import UTC, datetime
 
@@ -234,11 +232,11 @@ class OptimizationRun(Base):
             f"tickers={self.tickers!r}>"
         )
 
-    def mark_running(self) -> None:
+    def mark_running(self) -> "None":
         """Transition the run to 'running' status."""
         self.status = "running"
 
-    def mark_completed(self, completed_at: datetime | None = None) -> None:
+    def mark_completed(self, completed_at: datetime | None = None) -> "None":
         """Transition the run to 'completed' status.
 
         Args:
@@ -251,7 +249,7 @@ class OptimizationRun(Base):
         self,
         error_message: str,
         completed_at: datetime | None = None,
-    ) -> None:
+    ) -> "None":
         """Transition the run to 'failed' status.
 
         Args:
@@ -489,7 +487,7 @@ class ChatSession(Base):
         """
         return self.status in ("confirmed", "expired")
 
-    def append_message(self, role: str, content: str) -> None:
+    def append_message(self, role: str, content: str) -> "None":
         """Append a single message turn to the conversation history.
 
         Args:
@@ -509,7 +507,7 @@ class ChatSession(Base):
         self.messages = [*self.messages, {"role": role, "content": content}]
         self.updated_at = datetime.now(UTC)
 
-    def mark_pending_confirmation(self, extracted_slots: dict) -> None:
+    def mark_pending_confirmation(self, extracted_slots: dict) -> "None":
         """Transition to ``pending_confirmation`` with the extracted payload.
 
         Args:
@@ -520,7 +518,7 @@ class ChatSession(Base):
         self.extracted_slots = extracted_slots
         self.updated_at = datetime.now(UTC)
 
-    def mark_confirmed(self, run_id: str) -> None:
+    def mark_confirmed(self, run_id: str) -> "None":
         """Transition to ``confirmed`` and record the dispatched run UUID.
 
         Args:
@@ -530,7 +528,7 @@ class ChatSession(Base):
         self.run_id = run_id
         self.updated_at = datetime.now(UTC)
 
-    def mark_expired(self) -> None:
+    def mark_expired(self) -> "None":
         """Transition to ``expired`` status.
 
         Called by the service layer when a lazy expiry check detects that

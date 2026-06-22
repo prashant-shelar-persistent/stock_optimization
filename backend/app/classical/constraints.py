@@ -5,8 +5,6 @@ passing them to the CVXPY solver. Emits warnings for near-infeasible
 configurations rather than hard-failing where possible.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import numpy as np

@@ -15,8 +15,6 @@ Design decisions:
     - echo=True in development logs all SQL statements for debugging.
 """
 
-from __future__ import annotations
-
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,

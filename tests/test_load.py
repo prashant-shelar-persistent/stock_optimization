@@ -24,8 +24,6 @@ Design notes:
     - Concurrency level is kept at 10-20 to be fast and deterministic in CI.
 """
 
-from __future__ import annotations
-
 import asyncio
 import uuid
 from datetime import UTC, datetime

@@ -12,8 +12,6 @@ Tests cover:
 - Base: shared declarative base
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import datetime, timedelta, timezone
 

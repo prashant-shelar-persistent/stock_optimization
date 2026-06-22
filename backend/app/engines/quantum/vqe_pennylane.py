@@ -56,8 +56,6 @@ Usage::
     print(result.metrics.sharpe_ratio)
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -88,7 +86,7 @@ class VQESolver(BaseQuantumSolver):
         settings: Application settings (used for timeout and risk-free rate).
     """
 
-    def __init__(self) -> None:
+    def __init__(self) -> "None":
         """Initialise the VQE solver."""
         from app.core.config import get_settings as _get_settings  # noqa: PLC0415
         self.settings = _get_settings()
@@ -110,7 +108,7 @@ class VQESolver(BaseQuantumSolver):
         num_layers: int = 2,
         max_iterations: int = 100,
         **kwargs: Any,
-    ) -> QuantumAssetResult:
+    ) -> "QuantumAssetResult":
         """Run VQE-style optimization using PennyLane to solve the asset selection QUBO.
 
         Constructs a parameterised quantum circuit (hardware-efficient ansatz),
@@ -365,7 +363,7 @@ def run_vqe(
     sector_tags: dict[str, str] | None = None,
     num_layers: int = 2,
     max_iterations: int = 100,
-) -> QuantumAssetResult:
+) -> "QuantumAssetResult":
     """Convenience function to run VQE without instantiating the solver class.
 
     Creates a :class:`VQESolver` instance and calls :meth:`~VQESolver.solve`.

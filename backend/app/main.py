@@ -11,8 +11,6 @@ The endpoint provides:
   - ``http_requests_inprogress``     — in-flight request gauge
 """
 
-from __future__ import annotations
-
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -62,7 +60,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     logger.info("application_stopped")
 
 
-def create_app() -> FastAPI:
+def create_app() -> "FastAPI":
     """Create and configure the FastAPI application.
 
     Returns:
@@ -121,7 +119,7 @@ def create_app() -> FastAPI:
     async def portfolio_error_handler(
         request: Request,
         exc: PortfolioOptimizerError,
-    ) -> JSONResponse:
+    ) -> "JSONResponse":
         """Convert domain exceptions to structured JSON error responses."""
         logger.warning(
             "domain_error",
@@ -138,7 +136,7 @@ def create_app() -> FastAPI:
     async def unhandled_error_handler(
         request: Request,
         exc: Exception,
-    ) -> JSONResponse:
+    ) -> "JSONResponse":
         """Catch-all handler for unexpected exceptions."""
         logger.error(
             "unhandled_exception",
@@ -164,7 +162,7 @@ def create_app() -> FastAPI:
     return app
 
 
-def _setup_prometheus(app: FastAPI) -> None:
+def _setup_prometheus(app: FastAPI) -> "None":
     """Attach Prometheus instrumentation to the FastAPI application.
 
     Instruments the app with ``prometheus-fastapi-instrumentator`` and
@@ -198,7 +196,7 @@ def _setup_prometheus(app: FastAPI) -> None:
     )
 
 
-def _register_routers(app: FastAPI) -> None:
+def _register_routers(app: FastAPI) -> "None":
     """Register all API routers with the FastAPI application.
 
     Routers are imported lazily to avoid circular imports and to allow

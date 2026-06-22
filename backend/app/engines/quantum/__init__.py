@@ -61,8 +61,6 @@ Usage::
         print("VQE Sharpe:", result.vqe.metrics.sharpe_ratio)
     print("Best algorithm:", result.best_algorithm)
 """
-from __future__ import annotations
-
 from app.engines.quantum.base import BaseQuantumSolver
 from app.engines.quantum.dispatcher import QuantumDispatcher, run_quantum_optimization
 from app.engines.quantum.qaoa_qiskit import QAOASolver, run_qaoa

@@ -14,8 +14,6 @@ Usage example::
         await session.commit()
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import datetime
 from typing import Any
@@ -36,7 +34,7 @@ async def create_run(
     run_id: str | None = None,
     request: OptimizationRequest,
     status: str = "pending",
-) -> OptimizationRun:
+) -> "OptimizationRun":
     """Create and persist a new OptimizationRun record.
 
     The run is added to the session but NOT committed. The caller must
@@ -87,7 +85,7 @@ async def get_run_by_id(
 async def get_run_by_id_or_raise(
     session: AsyncSession,
     run_id: str,
-) -> OptimizationRun:
+) -> "OptimizationRun":
     """Fetch a single OptimizationRun by its public UUID, raising if not found.
 
     Args:
@@ -158,7 +156,7 @@ async def update_run_status(
     session: AsyncSession,
     run_id: str,
     status: str,
-) -> OptimizationRun:
+) -> "OptimizationRun":
     """Update the status of an existing run.
 
     Args:
@@ -180,7 +178,7 @@ async def update_run_status(
 async def mark_run_running(
     session: AsyncSession,
     run_id: str,
-) -> OptimizationRun:
+) -> "OptimizationRun":
     """Transition a run to 'running' status.
 
     Args:
@@ -209,7 +207,7 @@ async def mark_run_completed(
     classical_sharpe: float | None = None,
     quantum_sharpe: float | None = None,
     completed_at: datetime | None = None,
-) -> OptimizationRun:
+) -> "OptimizationRun":
     """Persist the final results and transition a run to 'completed' status.
 
     Args:
@@ -253,7 +251,7 @@ async def mark_run_failed(
     run_id: str,
     error_message: str,
     completed_at: datetime | None = None,
-) -> OptimizationRun:
+) -> "OptimizationRun":
     """Persist the error and transition a run to 'failed' status.
 
     Args:

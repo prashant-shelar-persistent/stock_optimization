@@ -33,8 +33,6 @@ Usage::
     weights = compute_max_sharpe_weights(mu, sigma, risk_free_rate=0.02)
 """
 
-from __future__ import annotations
-
 import warnings
 from typing import Any
 

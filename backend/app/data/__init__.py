@@ -49,8 +49,6 @@ Typical usage::
     cache = CacheManager(namespace="my_module:")
     cache.set("key", {"value": 42}, ttl=300)
 """
-from __future__ import annotations
-
 from app.data.cache import CacheManager, default_cache, reset_pool
 from app.data.fetcher import (
     MarketData,

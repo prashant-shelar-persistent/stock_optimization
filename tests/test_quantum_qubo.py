@@ -9,8 +9,6 @@ Tests cover:
 - Edge cases: single asset, all-zero returns, identity covariance
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

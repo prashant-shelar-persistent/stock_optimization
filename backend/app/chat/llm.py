@@ -55,8 +55,8 @@ The parsed JSON is validated through
 :class:`~app.chat.schemas.LLMSlotFillerOutput` before being returned to
 the caller.
 """
-
 from __future__ import annotations
+
 
 import contextlib
 import functools
@@ -75,9 +75,13 @@ from app.core.config import get_settings
 from app.core.exceptions import ChatSlotExtractionError
 from app.core.logging import get_logger
 
+try:
+    from openai import AsyncOpenAI
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None  # type: ignore[assignment,misc]
 
 if TYPE_CHECKING:
-    from openai import AsyncOpenAI
+    pass
 
 logger = get_logger(__name__)
 
@@ -153,7 +157,7 @@ class LLMSlotFiller:
         self,
         messages: list[Any],
         existing_slots: dict[str, Any],
-    ) -> LLMSlotFillerOutput:
+    ) -> "LLMSlotFillerOutput":
         """Extract slot values from the conversation history.
 
         Sends the full conversation history to GPT-4o with a structured-
@@ -358,7 +362,7 @@ class LLMSlotFiller:
 
         return raw_content
 
-    def _parse_response(self, raw_content: str) -> LLMSlotFillerOutput:
+    def _parse_response(self, raw_content: str) -> "LLMSlotFillerOutput":
         """Parse and validate the raw JSON response from GPT-4o.
 
         Defensively handles two common model misbehaviours before attempting
@@ -473,7 +477,7 @@ class LLMSlotFiller:
         self,
         messages: list[Any],
         existing_slots: dict[str, Any],
-    ) -> LLMSlotFillerOutput:
+    ) -> "LLMSlotFillerOutput":
         """Generate a response using local regex extraction when no API key is set.
 
         When ``OPENAI_API_KEY`` is not configured, this method parses the
@@ -759,7 +763,7 @@ class LLMSlotFiller:
 
 
 @functools.lru_cache(maxsize=1)
-def get_slot_filler() -> LLMSlotFiller:
+def get_slot_filler() -> "LLMSlotFiller":
     """Return a cached singleton :class:`LLMSlotFiller` instance.
 
     The singleton is created once per process and reuses the same

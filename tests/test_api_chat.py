@@ -29,8 +29,6 @@ Test scenarios:
 20. Invalid session_id format returns 422
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import UTC, datetime, timedelta

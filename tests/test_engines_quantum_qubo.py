@@ -10,8 +10,6 @@ Tests cover:
 - Re-exported functions from app.quantum.qubo are accessible
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

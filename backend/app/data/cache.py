@@ -43,8 +43,6 @@ Usage::
     cache.flush_namespace()
 """
 
-from __future__ import annotations
-
 import json
 import pickle
 import threading
@@ -107,7 +105,7 @@ def _get_client() -> redis.Redis:
     return redis.Redis(connection_pool=_get_pool())
 
 
-def reset_pool() -> None:
+def reset_pool() -> "None":
     """Disconnect and reset the module-level connection pool.
 
     Intended for use in tests or when the Redis URL changes at runtime.

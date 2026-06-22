@@ -13,8 +13,6 @@ Tests cover:
 10. status field is one of: healthy, degraded, unhealthy
 """
 
-from __future__ import annotations
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

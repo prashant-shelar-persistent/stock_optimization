@@ -19,8 +19,6 @@ Error handling:
     route to the error handler or terminal node gracefully.
 """
 
-from __future__ import annotations
-
 from typing import Any, TypedDict
 
 import numpy as np

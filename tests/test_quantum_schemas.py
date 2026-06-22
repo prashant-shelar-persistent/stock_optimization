@@ -9,8 +9,6 @@ Tests cover:
 - QuantumOptimizationResult: construction with optional fields
 """
 
-from __future__ import annotations
-
 import pytest
 from pydantic import ValidationError
 

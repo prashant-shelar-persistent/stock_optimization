@@ -51,8 +51,6 @@ Usage::
     tech_tickers = get_tickers_by_sector("Information Technology")
 """
 
-from __future__ import annotations
-
 from typing import Final
 
 

@@ -15,8 +15,6 @@ Design notes:
       of results returned.
 """
 
-from __future__ import annotations
-
 import asyncio
 from typing import Any
 
@@ -263,7 +261,7 @@ async def search_assets(
                 ]
         else:
             # Run yfinance lookup in thread pool to avoid blocking event loop
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             yf_result = await loop.run_in_executor(
                 None,
                 _lookup_yfinance,

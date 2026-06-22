@@ -14,8 +14,6 @@ Tests cover:
 11. GET /api/v1/runs/{run_id}/status — completed run has completed_at
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock

@@ -32,8 +32,6 @@ The same five convex measures the main optimiser supports:
 this before invoking the sweep.
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any, Callable
 
@@ -235,7 +233,7 @@ def _flag_dominance(
     points: list[FrontierPoint],
     x_direction: str,
     y_direction: str,
-) -> None:
+) -> "None":
     """Mark each point's ``is_dominant`` flag in place.
 
     A point p is dominated iff some other point q is at least as good
@@ -280,7 +278,7 @@ def compute_frontier(
     budget: float,
     constraints: dict[str, Any],
     frontier_cfg: dict[str, Any],
-) -> FrontierReport:
+) -> "FrontierReport":
     """Compute the efficient frontier between two measures.
 
     Args:
@@ -507,7 +505,7 @@ def _build_point(
     sector_indices_by_name: dict[str, list[int]],
     sector_map: dict[str, str],
     solver_status: str,
-) -> FrontierPoint:
+) -> "FrontierPoint":
     """Assemble a FrontierPoint from a solved weight vector."""
     x_val = _evaluate_raw(x_name, w_val, mu, cov, sector_indices_by_name)
     y_val = _evaluate_raw(y_name, w_val, mu, cov, sector_indices_by_name)

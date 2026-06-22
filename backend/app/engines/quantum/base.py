@@ -33,11 +33,9 @@ Usage::
             budget,
             num_assets_to_select,
             **kwargs,
-        ) -> QuantumAssetResult:
+        ) -> "QuantumAssetResult":
             ...
 """
-
-from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
@@ -84,7 +82,7 @@ class BaseQuantumSolver(ABC):
         budget: float,
         num_assets_to_select: int,
         **kwargs: Any,
-    ) -> QuantumAssetResult:
+    ) -> "QuantumAssetResult":
         """Run the quantum optimization and return the result.
 
         Args:

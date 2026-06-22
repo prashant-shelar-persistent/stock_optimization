@@ -35,8 +35,6 @@ Usage::
         print("VQE Sharpe:", result.vqe.metrics.sharpe_ratio)
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import numpy as np
@@ -63,7 +61,7 @@ def run_quantum_optimization(
     covariance_matrix: np.ndarray,
     budget: float,
     constraints: dict[str, Any],
-) -> QuantumResult:
+) -> "QuantumResult":
     """Run QAOA and VQE quantum optimization for portfolio asset selection.
 
     Builds a QUBO matrix from the provided market data and dispatches to

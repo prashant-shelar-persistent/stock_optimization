@@ -12,8 +12,6 @@ Tests cover:
 - Fallback to greedy when Qiskit raises an exception
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 import numpy as np

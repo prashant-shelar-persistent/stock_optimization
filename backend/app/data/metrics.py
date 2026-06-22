@@ -31,8 +31,8 @@ Usage::
     )
     print(metrics.sharpe_ratio)
 """
-
 from __future__ import annotations
+
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -112,7 +112,7 @@ def compute_portfolio_metrics(
     returns_data: pd.DataFrame | None = None,
     risk_free_rate: float = 0.02,
     weight_threshold: float = 1e-4,
-) -> PortfolioMetricsResult:
+) -> "PortfolioMetricsResult":
     """Compute comprehensive portfolio performance metrics.
 
     Args:

@@ -75,8 +75,6 @@ Type aliases
     chat session UUID.  Includes regex validation and length bounds.
 """
 
-from __future__ import annotations
-
 # Re-export everything from the canonical implementation module.
 # Using explicit names (rather than ``import *``) keeps the public
 # surface visible to static analysis tools and IDEs.

@@ -17,8 +17,6 @@ Usage example::
         run = await repo.create(run_id="...", request=req)
         await session.commit()
 """
-from __future__ import annotations
-
 from app.db.repositories.runs import RunsRepository
 
 

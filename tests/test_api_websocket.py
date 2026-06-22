@@ -12,8 +12,6 @@ Tests cover:
 9. Non-message Redis events (subscribe confirmations) are ignored
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import uuid

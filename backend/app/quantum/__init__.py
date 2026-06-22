@@ -35,8 +35,6 @@ Example::
     print(result.qaoa.metrics.sharpe_ratio)
     print(result.vqe.metrics.sharpe_ratio)
 """
-from __future__ import annotations
-
 from app.quantum.dispatcher import run_quantum_optimization
 from app.quantum.qaoa_solver import run_qaoa
 from app.quantum.qubo import build_qubo_matrix, decode_bitstring, qubo_energy

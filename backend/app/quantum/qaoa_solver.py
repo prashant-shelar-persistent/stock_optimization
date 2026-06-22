@@ -44,8 +44,6 @@ Usage::
     print(result.metrics.sharpe_ratio)
 """
 
-from __future__ import annotations
-
 import time
 
 import numpy as np
@@ -69,7 +67,7 @@ def run_qaoa(
     budget: float,
     num_assets_to_select: int,
     p: int = 2,
-) -> QAOAResult:
+) -> "QAOAResult":
     """Run QAOA on the Qiskit Aer simulator to solve the asset selection QUBO.
 
     Attempts to use Qiskit's QAOA implementation with the Sampler primitive.

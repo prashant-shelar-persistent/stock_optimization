@@ -58,8 +58,6 @@ Design notes
   to simulate realistic polling behaviour.
 """
 
-from __future__ import annotations
-
 import random
 import uuid
 from typing import Any

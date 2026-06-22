@@ -37,8 +37,6 @@ Usage::
     print(f"Sharpe: {metrics.sharpe_ratio:.4f}")
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import numpy as np
@@ -70,7 +68,7 @@ def compute_quantum_portfolio_metrics(
     risk_free_rate: float = 0.02,
     qubo_matrix: np.ndarray | None = None,
     x_binary: np.ndarray | None = None,
-) -> QuantumPortfolioMetrics:
+) -> "QuantumPortfolioMetrics":
     """Compute portfolio metrics for a quantum-selected equal-weight portfolio.
 
     Constructs equal-weight allocations for the selected assets and computes

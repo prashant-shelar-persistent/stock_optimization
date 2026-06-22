@@ -11,8 +11,6 @@ Tests cover:
 - Fallback to greedy when PennyLane raises an exception
 """
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 import numpy as np

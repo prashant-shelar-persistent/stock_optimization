@@ -15,8 +15,6 @@ Tests cover:
 12. services values are exactly "up" or "down" (no other values)
 """
 
-from __future__ import annotations
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

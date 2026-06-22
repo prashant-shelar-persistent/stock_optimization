@@ -21,8 +21,6 @@ Flows tested:
 15. Concurrent submit requests all return unique run_ids
 """
 
-from __future__ import annotations
-
 import re
 import uuid
 from typing import Any

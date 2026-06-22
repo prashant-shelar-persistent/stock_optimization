@@ -34,8 +34,6 @@ Scenarios covered
 25. Concurrent submits — all return unique run_ids (no collisions)
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 import re

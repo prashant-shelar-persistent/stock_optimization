@@ -13,8 +13,6 @@ Tests cover:
 10. Sector constraints accepted
 """
 
-from __future__ import annotations
-
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 

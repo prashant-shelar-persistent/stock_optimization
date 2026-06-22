@@ -47,8 +47,6 @@ Design decisions
 - All endpoints are tagged ``chat`` for OpenAPI grouping.
 """
 
-from __future__ import annotations
-
 import time
 from collections import defaultdict
 from typing import Annotated
@@ -178,7 +176,7 @@ _SessionId = Annotated[
 async def create_session(
     body: CreateSessionRequest,
     db: DbDep,
-) -> ChatSessionResponse:
+) -> "ChatSessionResponse":
     """Create a new chat session.
 
     Constructs a :class:`~app.chat.service.ChatService` bound to the
@@ -262,7 +260,7 @@ async def create_session(
 async def get_session(
     session_id: _SessionId,
     db: DbDep,
-) -> ChatSessionResponse:
+) -> "ChatSessionResponse":
     """Fetch the full state of an existing chat session.
 
     Args:
@@ -397,7 +395,7 @@ async def send_message(
     body: SendMessageRequest,
     db: DbDep,
     request: Request,
-) -> SendMessageResponse:
+) -> "SendMessageResponse":
     """Send a user message and receive the assistant's reply.
 
     Args:
@@ -587,7 +585,7 @@ async def confirm_session(
     session_id: _SessionId,
     body: ConfirmSessionRequest,
     db: DbDep,
-) -> ConfirmSessionResponse:
+) -> "ConfirmSessionResponse":
     """Confirm the extracted payload and dispatch the optimization run.
 
     Args:

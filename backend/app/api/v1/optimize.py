@@ -6,8 +6,6 @@ the run_id immediately. Progress is streamed via the WebSocket endpoint at
 /ws/runs/{run_id}/progress.
 """
 
-from __future__ import annotations
-
 import uuid
 
 from fastapi import APIRouter
@@ -39,7 +37,7 @@ router = APIRouter(tags=["optimization"])
 async def submit_optimization(
     request: OptimizationRequest,
     db: DbDep,
-) -> OptimizationSubmitResponse:
+) -> "OptimizationSubmitResponse":
     """Submit a new optimization run.
 
     The full agent graph (data fetch → classical opt → quantum opt →

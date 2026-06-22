@@ -7,8 +7,6 @@ Exports:
     AsyncSessionLocal — Async session factory
     repository        — Data access layer (CRUD operations)
 """
-from __future__ import annotations
-
 from app.db.models import Base, OptimizationRun
 from app.db.session import AsyncSessionLocal, engine
 

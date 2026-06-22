@@ -21,8 +21,6 @@ Tests cover:
 18. Result list is a JSON array (not an object)
 """
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 import pytest

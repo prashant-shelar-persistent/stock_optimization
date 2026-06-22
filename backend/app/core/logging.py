@@ -11,8 +11,6 @@ Usage::
     logger.info("optimization_started", run_id=str(run_id), tickers=tickers)
 """
 
-from __future__ import annotations
-
 import logging
 import sys
 from typing import Any
@@ -20,7 +18,7 @@ from typing import Any
 import structlog
 
 
-def configure_logging(log_level: str = "INFO", environment: str = "development") -> None:
+def configure_logging(log_level: str = "INFO", environment: str = "development") -> "None":
     """Configure structlog and stdlib logging.
 
     Call this once at application startup (in ``main.py`` lifespan).

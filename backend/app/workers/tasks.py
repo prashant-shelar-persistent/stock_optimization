@@ -36,8 +36,6 @@ Message format (JSON):
                 "message": "..."}
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 from datetime import UTC, datetime
@@ -89,7 +87,7 @@ class OptimizationTask(Task):
         node: str,
         status: str,
         message: str,
-    ) -> None:
+    ) -> "None":
         """Publish a progress event to the Redis pub/sub channel.
 
         Args:
@@ -121,7 +119,7 @@ class OptimizationTask(Task):
         self,
         run_id: str,
         result: dict[str, Any],
-    ) -> None:
+    ) -> "None":
         """Publish the final result to the Redis pub/sub channel.
 
         Args:
@@ -149,7 +147,7 @@ class OptimizationTask(Task):
         run_id: str,
         error_code: str,
         message: str,
-    ) -> None:
+    ) -> "None":
         """Publish an error event to the Redis pub/sub channel.
 
         Args:
@@ -374,7 +372,7 @@ async def _execute_optimization(
 async def _persist_completed_run(
     run_id: str,
     result_detail: Any,
-) -> None:
+) -> "None":
     """Persist a successfully completed run to the database.
 
     Populates all result fields and transitions the status to ``"completed"``.
@@ -443,7 +441,7 @@ async def _persist_completed_run(
         # A DB persistence failure should not cause the task to retry.
 
 
-async def _persist_failure(run_id: str, error_message: str) -> None:
+async def _persist_failure(run_id: str, error_message: str) -> "None":
     """Persist a failed run status to the database.
 
     Transitions the run to ``status="failed"`` and records the error message.
@@ -484,7 +482,7 @@ async def _persist_failure(run_id: str, error_message: str) -> None:
         )
 
 
-async def _update_run_status(run_id: str, status: str) -> None:
+async def _update_run_status(run_id: str, status: str) -> "None":
     """Update only the status field of a run record.
 
     Lightweight helper for intermediate status transitions (e.g., pending → running).

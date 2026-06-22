@@ -40,8 +40,6 @@ Usage::
     )
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -176,7 +174,7 @@ class QuantumOptimizationInput(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_dimensions(self) -> QuantumOptimizationInput:
+    def validate_dimensions(self) -> "QuantumOptimizationInput":
         """Ensure expected_returns and cov_matrix match the number of tickers."""
         n = len(self.tickers)
 

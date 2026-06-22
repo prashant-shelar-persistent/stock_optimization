@@ -9,8 +9,6 @@ Tests cover:
 - GICS_SECTORS constant: completeness check
 """
 
-from __future__ import annotations
-
 import pytest
 
 from app.data.sector_tags import (

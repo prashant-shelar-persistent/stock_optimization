@@ -33,8 +33,6 @@ Usage::
     print(result.sharpe_ratio)
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -66,7 +64,7 @@ class ClassicalOptimizer:
         settings: Application settings (used for ``RISK_FREE_RATE``).
     """
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None) -> "None":
         """Initialise the optimizer.
 
         Args:
@@ -80,7 +78,7 @@ class ClassicalOptimizer:
     def optimize(
         self,
         input_data: ClassicalOptimizationInput,
-    ) -> ClassicalOptimizationResult:
+    ) -> "ClassicalOptimizationResult":
         """Run Markowitz MVO and return the optimal portfolio.
 
         Args:
@@ -253,7 +251,7 @@ class ClassicalOptimizer:
         input_data: ClassicalOptimizationInput,
         mu: np.ndarray,
         sigma: np.ndarray,
-    ) -> None:
+    ) -> "None":
         """Validate inputs before building the CVXPY problem.
 
         Args:

@@ -24,8 +24,6 @@ Usage::
     result = celery_app.control.ping(timeout=2.0)
 """
 
-from __future__ import annotations
-
 from app.workers.celery_app import celery_app
 from app.workers.tasks import run_optimization_task
 

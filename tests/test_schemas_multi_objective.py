@@ -24,8 +24,6 @@ These tests pin the public contract so future refactors can't silently
 break the frontend or LLM-commentary pipeline.
 """
 
-from __future__ import annotations
-
 import pytest
 from pydantic import ValidationError
 

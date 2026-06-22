@@ -15,8 +15,6 @@ Tests cover:
 - Graceful degradation: all operations return safe defaults on Redis error
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 import pytest

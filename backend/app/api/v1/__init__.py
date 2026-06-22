@@ -17,8 +17,6 @@ Routes exposed:
     POST   /api/v1/chat/sessions/{session_id}/confirm  — Confirm and dispatch run
 """
 
-from __future__ import annotations
-
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
@@ -32,7 +30,7 @@ router = APIRouter()
 
 # Health check alias — /api/v1/health redirects to /health for ALB compatibility
 @router.get("/health", include_in_schema=False, tags=["health"])
-async def health_alias() -> RedirectResponse:
+async def health_alias() -> "RedirectResponse":
     """Redirect /api/v1/health to /health for load balancer compatibility."""
     return RedirectResponse(url="/health", status_code=307)
 

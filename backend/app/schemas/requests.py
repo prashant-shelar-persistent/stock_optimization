@@ -11,8 +11,6 @@ Phase 1 changes:
       into a default `objectives` list when the new field is omitted.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -141,7 +139,7 @@ class FrontierConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_distinct_axes(self) -> FrontierConfig:
+    def validate_distinct_axes(self) -> "FrontierConfig":
         """Ensure the X and Y measures are distinct when enabled."""
         if self.enabled and self.x_measure == self.y_measure:
             raise ValueError(
@@ -288,7 +286,7 @@ class OptimizationRequest(BaseModel):
         return result
 
     @model_validator(mode="after")
-    def validate_weight_constraints(self) -> OptimizationRequest:
+    def validate_weight_constraints(self) -> "OptimizationRequest":
         """Ensure min_weight < max_weight when both are specified."""
         if (
             self.min_weight_per_asset is not None
@@ -301,7 +299,7 @@ class OptimizationRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_num_assets_vs_tickers(self) -> OptimizationRequest:
+    def validate_num_assets_vs_tickers(self) -> "OptimizationRequest":
         """Ensure num_assets_to_select does not exceed the number of tickers."""
         if (
             self.num_assets_to_select is not None
@@ -314,7 +312,7 @@ class OptimizationRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_objectives_weights_sum(self) -> OptimizationRequest:
+    def validate_objectives_weights_sum(self) -> "OptimizationRequest":
         """Ensure the sum of enabled objective weights is in (0, 1.0].
 
         If the sum exceeds 1.0 by a small floating-point margin we
@@ -358,7 +356,7 @@ class OptimizationRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def normalize_legacy_constraints(self) -> OptimizationRequest:
+    def normalize_legacy_constraints(self) -> "OptimizationRequest":
         """Build a default ``objectives`` list from legacy scalar fields.
 
         Runs only when no explicit ``objectives`` matrix is provided and

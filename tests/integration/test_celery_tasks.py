@@ -26,8 +26,6 @@ Tests cover:
 23. publish_error timestamp is a valid ISO-8601 string
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime

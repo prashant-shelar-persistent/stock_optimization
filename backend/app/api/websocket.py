@@ -49,8 +49,6 @@ Design notes:
       accumulating if the client disconnects without sending a close frame.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 from datetime import UTC, datetime
@@ -79,7 +77,7 @@ _POLL_TIMEOUT_SECONDS = 1.0
 async def run_progress_websocket(
     websocket: WebSocket,
     run_id: str,
-) -> None:
+) -> "None":
     """Stream agent progress events for a given optimization run.
 
     The client connects immediately after submitting an optimization run.
@@ -107,11 +105,12 @@ async def run_progress_websocket(
         await pubsub.subscribe(channel)
 
         try:
-            deadline = asyncio.get_event_loop().time() + _WS_TIMEOUT_SECONDS
-            last_ping_time = asyncio.get_event_loop().time()
+            _loop = asyncio.get_running_loop()
+            deadline = _loop.time() + _WS_TIMEOUT_SECONDS
+            last_ping_time = _loop.time()
 
             while True:
-                now = asyncio.get_event_loop().time()
+                now = asyncio.get_running_loop().time()
 
                 # ── Check overall timeout ─────────────────────────────────────
                 remaining = deadline - now

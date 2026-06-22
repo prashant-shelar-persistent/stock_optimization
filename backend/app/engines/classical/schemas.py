@@ -38,8 +38,6 @@ Usage::
     )
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -99,7 +97,7 @@ class OptimizationConstraints(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_sector_limits(self) -> OptimizationConstraints:
+    def validate_sector_limits(self) -> "OptimizationConstraints":
         """Ensure all sector limit values are in [0, 1]."""
         for sector, limit in self.sector_limits.items():
             if not (0.0 <= limit <= 1.0):
@@ -146,7 +144,7 @@ class ClassicalOptimizationInput(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_dimensions(self) -> ClassicalOptimizationInput:
+    def validate_dimensions(self) -> "ClassicalOptimizationInput":
         """Ensure expected_returns and cov_matrix match the number of tickers."""
         n = len(self.tickers)
 

@@ -16,8 +16,6 @@ Design decisions:
     - Both paths return a plain string (no markdown) for easy rendering.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from app.core.config import get_settings

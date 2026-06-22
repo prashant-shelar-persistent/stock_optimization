@@ -17,8 +17,6 @@ Tests cover:
 14. Task has acks_late=True
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from unittest.mock import MagicMock, patch

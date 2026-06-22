@@ -22,8 +22,6 @@ Tests cover:
 19. Fallback path: both tickers and budget missing generates combined question
 """
 
-from __future__ import annotations
-
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch

@@ -26,7 +26,7 @@ Example usage in a FastAPI handler::
     from app.core.dependencies import DbDep
 
     @router.get("/runs/{run_id}")
-    async def get_run(run_id: str, db: DbDep) -> OptimizationRunDetail:
+    async def get_run(run_id: str, db: DbDep) -> "OptimizationRunDetail":
         repo = RunsRepository(db)
         run = await repo.get_by_id_or_raise(run_id)
         return OptimizationRunDetail.model_validate(run)
@@ -38,8 +38,6 @@ Example usage in a Celery task (sync wrapper around async)::
         await repo.mark_running(run_id)
         await session.commit()
 """
-
-from __future__ import annotations
 
 import uuid
 from datetime import datetime
@@ -95,7 +93,7 @@ class RunsRepository:
         run_id: str | None = None,
         request: OptimizationRequest,
         status: str = "pending",
-    ) -> OptimizationRun:
+    ) -> "OptimizationRun":
         """Create and stage a new OptimizationRun record.
 
         The record is added to the session but NOT committed. Call
@@ -135,7 +133,7 @@ class RunsRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_id_or_raise(self, run_id: str) -> OptimizationRun:
+    async def get_by_id_or_raise(self, run_id: str) -> "OptimizationRun":
         """Fetch a single run by its public UUID, raising if not found.
 
         Args:
@@ -241,7 +239,7 @@ class RunsRepository:
         self,
         run_id: str,
         status: str,
-    ) -> OptimizationRun:
+    ) -> "OptimizationRun":
         """Update the lifecycle status of an existing run.
 
         Args:
@@ -259,7 +257,7 @@ class RunsRepository:
         run.status = status
         return run
 
-    async def mark_running(self, run_id: str) -> OptimizationRun:
+    async def mark_running(self, run_id: str) -> "OptimizationRun":
         """Transition a run to ``'running'`` status.
 
         Delegates to the ORM model's ``mark_running()`` helper to keep
@@ -289,7 +287,7 @@ class RunsRepository:
         classical_sharpe: float | None = None,
         quantum_sharpe: float | None = None,
         completed_at: datetime | None = None,
-    ) -> OptimizationRun:
+    ) -> "OptimizationRun":
         """Persist the final results and transition a run to ``'completed'``.
 
         Only non-``None`` keyword arguments are written to the record,
@@ -337,7 +335,7 @@ class RunsRepository:
         error_message: str,
         *,
         completed_at: datetime | None = None,
-    ) -> OptimizationRun:
+    ) -> "OptimizationRun":
         """Persist the error and transition a run to ``'failed'`` status.
 
         Args:

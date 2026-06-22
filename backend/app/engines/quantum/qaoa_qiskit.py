@@ -46,8 +46,6 @@ Usage::
     print(result.metrics.sharpe_ratio)
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -76,7 +74,7 @@ class QAOASolver(BaseQuantumSolver):
         settings: Application settings (used for timeout and risk-free rate).
     """
 
-    def __init__(self) -> None:
+    def __init__(self) -> "None":
         """Initialise the QAOA solver."""
         from app.core.config import get_settings as _get_settings  # noqa: PLC0415
         self.settings = _get_settings()
@@ -97,7 +95,7 @@ class QAOASolver(BaseQuantumSolver):
         sector_tags: dict[str, str] | None = None,
         p: int = 2,
         **kwargs: Any,
-    ) -> QuantumAssetResult:
+    ) -> "QuantumAssetResult":
         """Run QAOA on the Qiskit Aer simulator to solve the asset selection QUBO.
 
         Attempts to use Qiskit's QAOA implementation with the Sampler primitive.
@@ -295,7 +293,7 @@ def run_qaoa(
     num_assets_to_select: int,
     sector_tags: dict[str, str] | None = None,
     p: int = 2,
-) -> QuantumAssetResult:
+) -> "QuantumAssetResult":
     """Convenience function to run QAOA without instantiating the solver class.
 
     Creates a :class:`QAOASolver` instance and calls :meth:`~QAOASolver.solve`.

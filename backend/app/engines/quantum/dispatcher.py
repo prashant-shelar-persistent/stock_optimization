@@ -45,8 +45,6 @@ Usage::
     print("Best algorithm:", result.best_algorithm)
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -83,14 +81,14 @@ class QuantumDispatcher:
         settings: Application settings (used for asset limits and timeouts).
     """
 
-    def __init__(self) -> None:
+    def __init__(self) -> "None":
         """Initialise the dispatcher."""
         self.settings = get_settings()
 
     def optimize(
         self,
         input_data: QuantumOptimizationInput,
-    ) -> QuantumOptimizationResult:
+    ) -> "QuantumOptimizationResult":
         """Run the full quantum optimization pipeline.
 
         Validates inputs, builds the QUBO matrix, dispatches to QAOA and VQE
@@ -326,7 +324,7 @@ def run_quantum_optimization(
     budget: float,
     constraints: dict[str, Any] | None = None,
     sector_tags: dict[str, str] | None = None,
-) -> QuantumOptimizationResult:
+) -> "QuantumOptimizationResult":
     """Convenience function to run quantum optimization without instantiating the dispatcher.
 
     Creates a :class:`QuantumDispatcher` instance and calls

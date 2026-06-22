@@ -21,8 +21,6 @@ Design decisions:
       FastAPI serialises them to ISO-8601 strings automatically.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -173,7 +171,7 @@ class ExtractedSlots(BaseModel):
         return result or None
 
     @model_validator(mode="after")
-    def validate_weight_bounds(self) -> ExtractedSlots:  # noqa: N804
+    def validate_weight_bounds(self) -> "ExtractedSlots":  # noqa: N804
         """Ensure min_weight < max_weight when both are specified."""
         if (
             self.min_weight_per_asset is not None
@@ -264,7 +262,7 @@ class LLMSlotFillerOutput(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_mutual_exclusion(self) -> LLMSlotFillerOutput:  # noqa: N804
+    def validate_mutual_exclusion(self) -> "LLMSlotFillerOutput":  # noqa: N804
         """Warn (but do not error) when both fields are null.
 
         A well-formed LLM response should have exactly one of
@@ -396,7 +394,7 @@ class ChatSessionResponse(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def extract_assistant_message(cls, data: Any) -> Any:
+    def extract_assistant_message(cls, data: Any) -> "Any":
         """Populate ``assistant_message`` from the last assistant turn.
 
         This validator runs before field assignment so it works both when

@@ -10,8 +10,6 @@ Tests cover:
 - Sector tags stored in weights
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pytest
 

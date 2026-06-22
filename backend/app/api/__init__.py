@@ -13,4 +13,3 @@ This package contains all FastAPI routers and WebSocket handlers:
         └── assets.py      — GET /api/v1/assets/search
 """
 
-from __future__ import annotations
