@@ -114,6 +114,12 @@ interface ChatState {
    * tracking the new run.
    */
   confirmedRunId: string | null;
+
+  /**
+   * The WebSocket auth token returned alongside `confirmedRunId`.
+   * Passed to `startNewRun` so the WebSocket can authenticate.
+   */
+  confirmedWsToken: string | null;
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -212,7 +218,7 @@ interface ChatActions {
    * Record the `run_id` returned after a successful confirmation.
    * Also updates `sessionStatus` to `"confirmed"` and clears `pendingPayload`.
    */
-  setConfirmedRunId: (runId: string) => void;
+  setConfirmedRunId: (runId: string, wsToken?: string | null) => void;
 
   // ── Convenience actions ────────────────────────────────────────────────────
 
@@ -304,6 +310,7 @@ export const useChatStore = create<ChatStore>()(
             isConfirming: false,
             error: null,
             confirmedRunId: null,
+            confirmedWsToken: null,
           },
           false,
           "chat/setSessionId",
@@ -373,10 +380,11 @@ export const useChatStore = create<ChatStore>()(
 
       // ── Confirmation ─────────────────────────────────────────────────────
 
-      setConfirmedRunId: (runId) =>
+      setConfirmedRunId: (runId, wsToken = null) =>
         set(
           {
             confirmedRunId: runId,
+            confirmedWsToken: wsToken ?? null,
             sessionStatus: "confirmed",
             pendingPayload: null,
             isConfirming: false,
@@ -433,6 +441,7 @@ export const useChatStore = create<ChatStore>()(
             isConfirming: false,
             error: null,
             confirmedRunId: null,
+            confirmedWsToken: null,
             // isPanelOpen is intentionally NOT reset — the panel stays open
             // so the user sees the empty state rather than the panel disappearing.
           },

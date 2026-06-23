@@ -397,10 +397,27 @@ class ChatService:
             budget=optimization_request.budget,
         )
 
+        # Generate a short-lived HMAC token for WebSocket authentication
+        ws_token: str | None = None
+        try:
+            from app.core.config import get_settings as _get_settings  # noqa: PLC0415
+            from app.core.security import create_ws_token  # noqa: PLC0415
+
+            _settings = _get_settings()
+            ws_token = create_ws_token(run_id=run_id, secret_key=_settings.SECRET_KEY)
+        except Exception as exc:
+            logger.warning(
+                "chat_ws_token_generation_failed",
+                session_id=session_id,
+                run_id=run_id,
+                error=str(exc),
+            )
+
         return ConfirmSessionResponse(
             session_id=session_id,
             run_id=run_id,
             status="confirmed",
+            ws_token=ws_token,
         )
 
     async def get_session(self, session_id: str) -> "ChatSessionResponse":

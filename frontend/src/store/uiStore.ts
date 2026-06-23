@@ -41,6 +41,9 @@ interface UIState {
   /** The run ID currently being tracked (null when idle). */
   currentRunId: string | null;
 
+  /** The WebSocket auth token for the current run (null when idle). */
+  wsToken: string | null;
+
   /** The completed optimization result (null until a run finishes). */
   optimizationResult: OptimizationRunDetail | null;
 
@@ -62,6 +65,9 @@ interface UIState {
 interface UIActions {
   /** Set the active run ID (called immediately after submitting an optimization). */
   setCurrentRunId: (runId: string | null) => void;
+
+  /** Set the WebSocket auth token for the current run. */
+  setWsToken: (token: string | null) => void;
 
   /** Store the completed optimization result (called when WebSocket delivers "result"). */
   setOptimizationResult: (result: OptimizationRunDetail | null) => void;
@@ -86,7 +92,7 @@ interface UIActions {
    * Equivalent to calling resetProgress + setCurrentRunId + setIsOptimizing(true)
    * + setOptimizationResult(null) in sequence.
    */
-  startNewRun: (runId: string) => void;
+  startNewRun: (runId: string, wsToken?: string | null) => void;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -108,6 +114,7 @@ export const useUIStore = create<UIStore>()(
       // ── Initial state ──────────────────────────────────────────────────────
 
       currentRunId: null,
+      wsToken: null,
       optimizationResult: null,
       isOptimizing: false,
       agentProgress: [],
@@ -117,6 +124,9 @@ export const useUIStore = create<UIStore>()(
 
       setCurrentRunId: (runId) =>
         set({ currentRunId: runId }, false, "ui/setCurrentRunId"),
+
+      setWsToken: (token) =>
+        set({ wsToken: token }, false, "ui/setWsToken"),
 
       setOptimizationResult: (result) =>
         set({ optimizationResult: result }, false, "ui/setOptimizationResult"),
@@ -144,10 +154,11 @@ export const useUIStore = create<UIStore>()(
       setActiveTab: (tab) =>
         set({ activeTab: tab }, false, "ui/setActiveTab"),
 
-      startNewRun: (runId) =>
+      startNewRun: (runId, wsToken = null) =>
         set(
           {
             currentRunId: runId,
+            wsToken: wsToken ?? null,
             isOptimizing: true,
             optimizationResult: null,
             agentProgress: [],

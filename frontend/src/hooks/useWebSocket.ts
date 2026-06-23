@@ -2,13 +2,20 @@
  * useWebSocket — custom hook managing the WebSocket lifecycle for a run.
  *
  * Responsibilities:
- *   - Opens a WebSocket via openProgressSocket(runId) when runId is non-null
+ *   - Opens a WebSocket via openProgressSocket(runId, wsToken) when runId is non-null
  *   - Parses incoming WebSocketMessage objects (typed from @/types/api)
  *   - On "progress" messages: calls uiStore.addAgentProgress()
  *   - On "result"  messages: calls uiStore.setOptimizationResult() + setIsOptimizing(false)
  *   - On "error"   messages: shows a toast error and sets isOptimizing(false)
  *   - Handles reconnection on unexpected close (up to 3 retries with 2 s backoff)
  *   - Cleans up the WebSocket on unmount or when runId changes
+ *
+ * Fix (2026-06-23): wsToken is now passed directly into connect() and included
+ * in the useEffect dependency array. Previously the effect only depended on
+ * [runId, connect], so when runId changed the wsTokenRef might still be null
+ * (the ref update happens during render but the effect fires asynchronously).
+ * Passing wsToken explicitly ensures the token is always available when the
+ * WebSocket is opened.
  *
  * Returns: { connectionState }
  */
@@ -28,7 +35,7 @@ interface UseWebSocketReturn {
   connectionState: ConnectionState;
 }
 
-export function useWebSocket(runId: string | null): UseWebSocketReturn {
+export function useWebSocket(runId: string | null, wsToken?: string | null): UseWebSocketReturn {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("closed");
 
@@ -44,7 +51,7 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
   const setIsOptimizing = useUIStore((s) => s.setIsOptimizing);
   const { toast } = useToast();
 
-  // ── Message handler ────────────────────────────────────────────────────────
+  // ── Message handler ──────────────────────────────────────────────────────────
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -82,10 +89,12 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
     [addAgentProgress, setOptimizationResult, setIsOptimizing, toast],
   );
 
-  // ── Connection factory ─────────────────────────────────────────────────────
+  // ── Connection factory ───────────────────────────────────────────────────────
+  // FIX: accept token as an explicit parameter so the caller always passes the
+  // current value rather than relying on a ref that may lag one render cycle.
 
   const connect = useCallback(
-    (id: string) => {
+    (id: string, token: string | null | undefined) => {
       // Close any existing socket before opening a new one
       if (socketRef.current) {
         socketRef.current.onclose = null; // prevent retry logic from firing
@@ -95,7 +104,7 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
 
       setConnectionState("connecting");
 
-      const ws = openProgressSocket(id);
+      const ws = openProgressSocket(id, token);
       socketRef.current = ws;
 
       ws.onopen = () => {
@@ -116,6 +125,23 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
           return;
         }
 
+        // Auth failure (code 4001) — do not retry, token won't change
+        if (event.code === 4001) {
+          console.warn(
+            `[useWebSocket] WebSocket auth rejected (code 4001) for run ${id}. ` +
+              "Check that ws_token is being passed correctly.",
+          );
+          setConnectionState("error");
+          setIsOptimizing(false);
+          toast({
+            variant: "destructive",
+            title: "Connection rejected",
+            description:
+              "WebSocket authentication failed. Please try submitting again.",
+          });
+          return;
+        }
+
         // Unexpected closure — attempt reconnection with backoff
         if (retryCountRef.current < MAX_RETRIES) {
           retryCountRef.current += 1;
@@ -126,7 +152,7 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
           );
           retryTimerRef.current = setTimeout(() => {
             if (runIdRef.current === id) {
-              connect(id);
+              connect(id, token);
             }
           }, delay);
         } else {
@@ -147,7 +173,11 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
     [handleMessage, setIsOptimizing, toast],
   );
 
-  // ── Effect: open/close socket when runId changes ───────────────────────────
+  // ── Effect: open/close socket when runId or wsToken changes ─────────────────
+  // FIX: wsToken is now in the dependency array. When startNewRun() sets both
+  // currentRunId and wsToken atomically, React batches them into one render.
+  // The effect fires after that render with both the new runId AND the new
+  // wsToken, so the token is always available when connect() is called.
 
   useEffect(() => {
     if (!runId) {
@@ -166,10 +196,11 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
       return;
     }
 
-    connect(runId);
+    // Pass wsToken explicitly so the connection always uses the current token
+    connect(runId, wsToken);
 
-    // Cleanup: close socket and cancel any pending retry when runId changes or
-    // the component unmounts
+    // Cleanup: close socket and cancel any pending retry when runId/wsToken
+    // changes or the component unmounts
     return () => {
       if (retryTimerRef.current !== null) {
         clearTimeout(retryTimerRef.current);
@@ -182,7 +213,8 @@ export function useWebSocket(runId: string | null): UseWebSocketReturn {
       }
       retryCountRef.current = 0;
     };
-  }, [runId, connect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, wsToken, connect]);
 
   return { connectionState };
 }

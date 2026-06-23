@@ -27,7 +27,7 @@ Security hardening (Phase 3)
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import Response, APIRouter, HTTPException, Path, Query, Request
 from sqlalchemy import func, select
 
 from app.core.dependencies import DbDep
@@ -80,6 +80,7 @@ _RunId = Annotated[
 @limiter.limit(RATE_LIMIT_READ)
 async def list_runs(
     request: Request,
+    response: Response,
     db: DbDep,
     page: int = Query(default=1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(
@@ -181,6 +182,7 @@ async def list_runs(
 @limiter.limit(RATE_LIMIT_READ)
 async def get_run_status(
     request: Request,
+    response: Response,
     run_id: _RunId,
     db: DbDep,
 ) -> "RunStatusResponse":
@@ -248,6 +250,7 @@ async def get_run_status(
 @limiter.limit(RATE_LIMIT_READ)
 async def get_run(
     request: Request,
+    response: Response,
     run_id: _RunId,
     db: DbDep,
 ) -> "OptimizationRunDetail":

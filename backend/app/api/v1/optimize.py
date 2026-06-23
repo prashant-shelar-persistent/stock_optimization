@@ -19,7 +19,7 @@ Security hardening (Phase 3)
 
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import Response, APIRouter, Request
 
 from app.core.dependencies import DbDep
 from app.core.logging import get_logger
@@ -53,6 +53,7 @@ router = APIRouter(tags=["optimization"])
 @limiter.limit(RATE_LIMIT_WRITE)
 async def submit_optimization(
     request: Request,
+    response: Response,
     body: OptimizationRequest,
     db: DbDep,
 ) -> "OptimizationSubmitResponse":

@@ -59,7 +59,7 @@ registered in ``main.py`` and works correctly across all processes.  The
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Request
+from fastapi import Response, APIRouter, Path, Request
 
 from app.chat.schemas import (
     ChatSessionResponse,
@@ -149,6 +149,7 @@ _SessionId = Annotated[
 @limiter.limit(RATE_LIMIT_CHAT_CREATE)
 async def create_session(
     request: Request,
+    response: Response,
     body: CreateSessionRequest,
     db: DbDep,
 ) -> "ChatSessionResponse":
@@ -235,6 +236,7 @@ async def create_session(
 @limiter.limit(RATE_LIMIT_CHAT)
 async def get_session(
     request: Request,
+    response: Response,
     session_id: _SessionId,
     db: DbDep,
 ) -> "ChatSessionResponse":
@@ -370,6 +372,7 @@ async def get_session(
 @limiter.limit(RATE_LIMIT_CHAT)
 async def send_message(
     request: Request,
+    response: Response,
     session_id: _SessionId,
     body: SendMessageRequest,
     db: DbDep,
@@ -545,6 +548,7 @@ async def send_message(
 @limiter.limit(RATE_LIMIT_CHAT)
 async def confirm_session(
     request: Request,
+    response: Response,
     session_id: _SessionId,
     body: ConfirmSessionRequest,
     db: DbDep,

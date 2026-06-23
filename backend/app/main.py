@@ -143,6 +143,14 @@ def create_app() -> "FastAPI":
     # is a lazy proxy that initialises the real Limiter on first use.
     app.state.limiter = limiter
 
+    # SlowAPIMiddleware intercepts requests and injects rate-limit headers.
+    # Must be added AFTER setting app.state.limiter.
+    try:
+        from slowapi.middleware import SlowAPIMiddleware  # noqa: PLC0415
+        app.add_middleware(SlowAPIMiddleware)
+    except ImportError:
+        pass
+
     # ── Exception handlers ────────────────────────────────────────────────────
     _register_exception_handlers(app)
 

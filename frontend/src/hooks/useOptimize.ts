@@ -43,10 +43,11 @@ export function useOptimize(): UseOptimizeReturn {
       setError(null);
 
       try {
-        const { run_id } = await submitOptimization(payload);
+        const { run_id, ws_token } = await submitOptimization(payload);
 
         // Transition the global store into "running" state for this run
-        startNewRun(run_id);
+        // Pass ws_token so the WebSocket can authenticate with the backend
+        startNewRun(run_id, ws_token);
 
         toast({
           title: "Optimization started",

@@ -120,12 +120,13 @@ export default function DashboardPage() {
 
   // Global state
   const currentRunId = useUIStore((s) => s.currentRunId);
+  const wsToken = useUIStore((s) => s.wsToken);
   const isOptimizing = useUIStore((s) => s.isOptimizing);
   const agentProgress = useUIStore((s) => s.agentProgress);
   const optimizationResult = useUIStore((s) => s.optimizationResult);
 
-  // WebSocket — opens when currentRunId is set
-  const { connectionState } = useWebSocket(currentRunId);
+  // WebSocket — opens when currentRunId is set; wsToken authenticates the connection
+  const { connectionState } = useWebSocket(currentRunId, wsToken);
 
   // Optimize hook — for submit button state
   const { isSubmitting } = useOptimize();

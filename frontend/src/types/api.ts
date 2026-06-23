@@ -419,4 +419,6 @@ export interface ConfirmChatSessionResponse {
   session_id: string;
   run_id: string;
   status: "confirmed";
+  /** Short-lived HMAC token for WebSocket authentication (may be null if generation failed). */
+  ws_token?: string | null;
 }

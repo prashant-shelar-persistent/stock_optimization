@@ -74,6 +74,7 @@ function ChatAssistant() {
   const isConfirming = useChatStore((s) => s.isConfirming);
   const error = useChatStore((s) => s.error);
   const confirmedRunId = useChatStore((s) => s.confirmedRunId);
+  const confirmedWsToken = useChatStore((s) => s.confirmedWsToken);
 
   const togglePanel = useChatStore((s) => s.togglePanel);
   const closePanel = useChatStore((s) => s.closePanel);
@@ -94,11 +95,12 @@ function ChatAssistant() {
   // When a run is confirmed, hand off to the existing optimization pipeline
   useEffect(() => {
     if (confirmedRunId) {
-      startNewRun(confirmedRunId);
+      // Pass ws_token so the WebSocket can authenticate with the backend
+      startNewRun(confirmedRunId, confirmedWsToken);
       // Close the panel so the user can see the progress panel
       closePanel();
     }
-  }, [confirmedRunId, startNewRun, closePanel]);
+  }, [confirmedRunId, confirmedWsToken, startNewRun, closePanel]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

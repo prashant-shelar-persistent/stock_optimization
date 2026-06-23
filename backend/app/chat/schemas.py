@@ -503,6 +503,7 @@ class ConfirmSessionResponse(BaseModel):
         session_id — UUID of the confirmed session.
         run_id     — UUID of the dispatched optimization run.
         status     — Session status after confirmation (always ``'confirmed'``).
+        ws_token   — Short-lived HMAC token for WebSocket authentication.
     """
 
     session_id: str = Field(description="UUID of the confirmed chat session")
@@ -510,6 +511,15 @@ class ConfirmSessionResponse(BaseModel):
     status: Literal["confirmed"] = Field(
         default="confirmed",
         description="Session status after confirmation",
+    )
+    ws_token: str | None = Field(
+        default=None,
+        description=(
+            "Short-lived HMAC-signed token for WebSocket authentication. "
+            "Pass as ?token=<ws_token> when connecting to "
+            "/ws/runs/{run_id}/progress. Valid for 300 seconds. "
+            "None if token generation failed (non-fatal)."
+        ),
     )
 
 

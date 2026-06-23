@@ -294,8 +294,8 @@ export function useChatSession(): UseChatSessionReturn {
           signal,
         );
 
-        // Record the confirmed run ID (also updates status + clears payload)
-        setConfirmedRunId(response.run_id);
+        // Record the confirmed run ID and ws_token (also updates status + clears payload)
+        setConfirmedRunId(response.run_id, response.ws_token);
 
         setIsConfirming(false);
         return response.run_id;
