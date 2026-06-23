@@ -3,6 +3,16 @@
 This module creates the FastAPI app instance, registers all routers,
 configures middleware, and manages startup/shutdown lifecycle events.
 
+Security hardening (Phase 1)
+-----------------------------
+- CORS origins are now driven by the ``ALLOWED_ORIGINS`` environment variable
+  (parsed from ``Settings.allowed_origins_list``).  The previous wildcard
+  ``allow_origins=["*"]`` combined with ``allow_credentials=True`` is
+  rejected by browsers per the CORS specification and has been removed.
+- A ``slowapi`` ``RateLimitExceeded`` exception handler is registered so that
+  rate-limited requests receive a well-formed JSON 429 response instead of an
+  unhandled 500.
+
 Prometheus instrumentation is added via ``prometheus-fastapi-instrumentator``
 which exposes a ``/metrics`` endpoint in Prometheus text format (version 0.0.4).
 The endpoint provides:
@@ -21,6 +31,7 @@ from app.core.config import get_settings
 from app.core.dependencies import close_redis
 from app.core.exceptions import PortfolioOptimizerError
 from app.core.logging import configure_logging, get_logger
+from app.core.rate_limit import limiter
 
 
 logger = get_logger(__name__)
@@ -50,11 +61,12 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
         "application_starting",
         environment=settings.ENVIRONMENT,
         log_level=settings.LOG_LEVEL,
+        allowed_origins=settings.allowed_origins_list,
     )
 
     yield  # Application runs here
 
-    # ── Shutdown ────────────────────────────────────────────────────────────
+    # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("application_shutting_down")
     await close_redis()
     logger.info("application_stopped")
@@ -65,7 +77,8 @@ def create_app() -> "FastAPI":
 
     Returns:
         A fully configured FastAPI instance with:
-        - CORS middleware
+        - CORS middleware (env-driven origins, no wildcard with credentials)
+        - slowapi rate-limit error handler
         - Prometheus instrumentation (``/metrics`` endpoint)
         - Domain exception handlers
         - All API routers registered
@@ -85,26 +98,36 @@ def create_app() -> "FastAPI":
         lifespan=lifespan,
     )
 
-    # ── CORS ────────────────────────────────────────────────────────────────
-    # In development, allow all origins. In production, restrict to the
-    # frontend domain via the ALLOWED_ORIGINS env var (future enhancement).
-    allowed_origins = (
-        ["*"]
-        if settings.ENVIRONMENT == "development"
-        else [
-            "https://portfolio-optimizer.example.com",
-        ]
-    )
+    # ── CORS ──────────────────────────────────────────────────────────────────
+    # Origins are loaded from the ``ALLOWED_ORIGINS`` environment variable
+    # (comma-separated list).  The previous ``allow_origins=["*"]`` combined
+    # with ``allow_credentials=True`` is a CORS spec violation that browsers
+    # reject, and it exposes the API to any origin.
+    #
+    # Security rules enforced here:
+    #   1. Wildcard ``*`` is never combined with ``allow_credentials=True``.
+    #   2. In production/staging, the Settings validator already rejects ``*``
+    #      and empty origin lists, so we never reach this point with an
+    #      insecure configuration.
+    #   3. In development the default is ``http://localhost:3000`` (the Vite
+    #      dev server), which is safe for local use.
+    allowed_origins = settings.allowed_origins_list
+
+    # Determine whether credentials (cookies / Authorization headers) should
+    # be allowed.  Credentials MUST NOT be combined with a wildcard origin.
+    allow_credentials = "*" not in allowed_origins
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials=allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID", "Retry-After"],
+        max_age=600,  # Cache preflight for 10 minutes
     )
 
-    # ── Prometheus instrumentation ──────────────────────────────────────────
+    # ── Prometheus instrumentation ────────────────────────────────────────────
     # ``prometheus-fastapi-instrumentator`` wraps the ASGI app to collect
     # per-route HTTP metrics and exposes them at ``/metrics`` in the standard
     # Prometheus text exposition format (Content-Type: text/plain; version=0.0.4).
@@ -114,7 +137,74 @@ def create_app() -> "FastAPI":
     # ``/metrics`` endpoint will simply be absent in that case.
     _setup_prometheus(app)
 
-    # ── Exception handlers ──────────────────────────────────────────────────
+    # ── Rate limiter state ────────────────────────────────────────────────────
+    # slowapi requires the Limiter instance to be attached to app.state so
+    # that the middleware can find it when processing requests.  The limiter
+    # is a lazy proxy that initialises the real Limiter on first use.
+    app.state.limiter = limiter
+
+    # ── Exception handlers ────────────────────────────────────────────────────
+    _register_exception_handlers(app)
+
+    # ── Routers ───────────────────────────────────────────────────────────────
+    # Routers are imported lazily to avoid circular imports and to allow
+    # individual router modules to be developed independently.
+    _register_routers(app)
+
+    return app
+
+
+def _register_exception_handlers(app: FastAPI) -> None:
+    """Register all exception handlers on the FastAPI application.
+
+    Handlers registered:
+    - ``RateLimitExceeded`` (slowapi) → 429 JSON response with ``Retry-After``
+    - ``PortfolioOptimizerError``     → structured JSON mapped to HTTP status
+    - ``Exception``                   → catch-all 500 JSON response
+    """
+    # ── slowapi rate-limit handler ────────────────────────────────────────────
+    # slowapi raises ``slowapi.errors.RateLimitExceeded`` when a client
+    # exceeds the configured rate limit.  Without this handler FastAPI would
+    # return a 500 Internal Server Error.  We convert it to a proper 429 with
+    # a ``Retry-After`` header so clients know when to retry.
+    try:
+        from slowapi.errors import RateLimitExceeded  # noqa: PLC0415
+
+        @app.exception_handler(RateLimitExceeded)
+        async def rate_limit_handler(
+            request: Request,
+            exc: RateLimitExceeded,
+        ) -> JSONResponse:
+            """Return a 429 Too Many Requests response for rate-limited clients."""
+            logger.warning(
+                "rate_limit_exceeded",
+                path=str(request.url),
+                client=request.client.host if request.client else "unknown",
+                limit=str(exc),
+            )
+            # Extract retry-after from the exception if available
+            retry_after = getattr(exc, "retry_after", None)
+            headers = {}
+            if retry_after is not None:
+                headers["Retry-After"] = str(int(retry_after))
+
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error_code": "RATE_LIMIT_EXCEEDED",
+                    "message": "Too many requests. Please slow down and try again later.",
+                    "details": {"limit": str(exc)},
+                },
+                headers=headers,
+            )
+
+    except ImportError:
+        logger.warning(
+            "slowapi_not_installed",
+            message="slowapi is not installed; rate-limit handler not registered",
+        )
+
+    # ── Domain error handler ──────────────────────────────────────────────────
     @app.exception_handler(PortfolioOptimizerError)
     async def portfolio_error_handler(
         request: Request,
@@ -132,6 +222,7 @@ def create_app() -> "FastAPI":
             content=exc.to_dict(),
         )
 
+    # ── Catch-all handler ─────────────────────────────────────────────────────
     @app.exception_handler(Exception)
     async def unhandled_error_handler(
         request: Request,
@@ -153,13 +244,6 @@ def create_app() -> "FastAPI":
                 "details": {},
             },
         )
-
-    # ── Routers ─────────────────────────────────────────────────────────────
-    # Routers are imported lazily to avoid circular imports and to allow
-    # individual router modules to be developed independently.
-    _register_routers(app)
-
-    return app
 
 
 def _setup_prometheus(app: FastAPI) -> "None":
@@ -218,17 +302,17 @@ def _error_code_to_http_status(error_code: str) -> int:
     Unknown error codes fall back to 500 (Internal Server Error).
     """
     mapping: dict[str, int] = {
-        # ── Data layer ──────────────────────────────────────────────────────
+        # ── Data layer ────────────────────────────────────────────────────────
         "DATA_FETCH_ERROR": 502,
         "CACHE_ERROR": 503,
-        # ── Optimization layer ──────────────────────────────────────────────
+        # ── Optimization layer ────────────────────────────────────────────────
         "CONSTRAINT_VIOLATION": 422,
         "SOLVER_INFEASIBLE": 422,
         "QUANTUM_TIMEOUT": 504,
         "QUANTUM_ASSET_LIMIT_EXCEEDED": 422,
-        # ── Agent layer ─────────────────────────────────────────────────────
+        # ── Agent layer ───────────────────────────────────────────────────────
         "AGENT_EXECUTION_ERROR": 500,
-        # ── Chat layer ──────────────────────────────────────────────────────
+        # ── Chat layer ────────────────────────────────────────────────────────
         # 404 - session does not exist in the database
         "CHAT_SESSION_NOT_FOUND": 404,
         # 410 - session existed but its TTL has passed; client must create new session
@@ -243,7 +327,11 @@ def _error_code_to_http_status(error_code: str) -> int:
         "CHAT_TOO_MANY_MESSAGES": 422,
         # 422 - slot_overrides dict has too many keys or unrecognised field names
         "CHAT_SLOT_OVERRIDE_ERROR": 422,
-        # ── Fallback ────────────────────────────────────────────────────────
+        # ── Rate limiting ─────────────────────────────────────────────────────
+        "RATE_LIMIT_EXCEEDED": 429,
+        # ── WebSocket auth ────────────────────────────────────────────────────
+        "WS_AUTH_FAILED": 403,
+        # ── Fallback ──────────────────────────────────────────────────────────
         "INTERNAL_ERROR": 500,
     }
     return mapping.get(error_code, 500)

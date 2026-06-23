@@ -19,8 +19,8 @@ Usage::
 """
 
 import hashlib
+import orjson
 import json
-import pickle
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -480,30 +480,136 @@ def _make_cache_key(tickers: list[str], lookback_days: int) -> str:
     return "market_data:" + hashlib.sha256(key_data.encode()).hexdigest()
 
 
-def _get_from_cache(cache_key: str) -> MarketData | None:
-    """Try to retrieve a MarketData object from Redis cache."""
+# Magic prefix that identifies our JSON-serialised blobs.
+# Pickle blobs start with 0x80 (protocol >= 2) or 0x28 (protocol 0).
+# Any blob without this prefix is treated as an untrusted legacy entry
+# and discarded rather than deserialised.
+_FETCHER_JSON_PREFIX = b"\x00mdjson\x00"
+
+
+def _market_data_to_dict(market_data: "MarketData") -> dict:
+    """Serialise a MarketData object to a JSON-safe dict.
+
+    Converts numpy arrays and pandas DataFrames to nested Python lists/dicts
+    so they can be round-tripped through orjson without pickle.
+    """
+    return {
+        "valid_tickers": market_data.valid_tickers,
+        "price_data": {
+            "index": [str(i) for i in market_data.price_data.index],
+            "columns": list(market_data.price_data.columns),
+            "data": market_data.price_data.values.tolist(),
+        },
+        "returns_data": {
+            "index": [str(i) for i in market_data.returns_data.index],
+            "columns": list(market_data.returns_data.columns),
+            "data": market_data.returns_data.values.tolist(),
+        },
+        "expected_returns": market_data.expected_returns.tolist(),
+        "covariance_matrix": market_data.covariance_matrix.tolist(),
+        "sector_map": market_data.sector_map,
+        "fetch_timestamp": market_data.fetch_timestamp.isoformat(),
+        "metadata": market_data.metadata,
+    }
+
+
+def _dict_to_market_data(d: dict) -> "MarketData":
+    """Reconstruct a MarketData object from a JSON-deserialised dict."""
+    price_df = pd.DataFrame(
+        data=d["price_data"]["data"],
+        index=pd.to_datetime(d["price_data"]["index"]),
+        columns=d["price_data"]["columns"],
+    )
+    returns_df = pd.DataFrame(
+        data=d["returns_data"]["data"],
+        index=pd.to_datetime(d["returns_data"]["index"]),
+        columns=d["returns_data"]["columns"],
+    )
+    fetch_ts_raw = d.get("fetch_timestamp")
+    if fetch_ts_raw:
+        try:
+            fetch_ts = datetime.fromisoformat(fetch_ts_raw)
+            if fetch_ts.tzinfo is None:
+                fetch_ts = fetch_ts.replace(tzinfo=UTC)
+        except (ValueError, TypeError):
+            fetch_ts = datetime.now(UTC)
+    else:
+        fetch_ts = datetime.now(UTC)
+
+    return MarketData(
+        valid_tickers=d["valid_tickers"],
+        price_data=price_df,
+        returns_data=returns_df,
+        expected_returns=np.array(d["expected_returns"]),
+        covariance_matrix=np.array(d["covariance_matrix"]),
+        sector_map=d.get("sector_map", {}),
+        fetch_timestamp=fetch_ts,
+        metadata=d.get("metadata", {}),
+    )
+
+
+def _get_from_cache(cache_key: str) -> "MarketData | None":
+    """Try to retrieve a MarketData object from Redis cache.
+
+    Security: uses orjson (JSON) deserialisation instead of pickle.
+    Pickle blobs from before this security fix are detected via the
+    absence of the ``_FETCHER_JSON_PREFIX`` magic prefix and discarded
+    rather than deserialised, preventing arbitrary code execution from
+    stale cache entries.
+    """
     try:
-        import redis
+        import redis  # noqa: PLC0415
 
         settings = get_settings()
         r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
-        data = r.get(cache_key)
-        if data:
-            return pickle.loads(data)  # noqa: S301
+        raw = r.get(cache_key)
+        if raw is None:
+            return None
+
+        # Reject legacy pickle blobs
+        if not raw.startswith(_FETCHER_JSON_PREFIX):
+            logger.warning(
+                "fetcher_cache_legacy_blob_rejected",
+                cache_key=cache_key[:16],
+                reason=(
+                    "Cached MarketData does not have the expected JSON prefix. "
+                    "Discarding potential legacy pickle blob."
+                ),
+            )
+            try:
+                r.delete(cache_key)
+            except Exception:
+                pass
+            return None
+
+        json_bytes = raw[len(_FETCHER_JSON_PREFIX):]
+        d = orjson.loads(json_bytes)
+        return _dict_to_market_data(d)
+
     except Exception as exc:
         logger.debug("cache_get_failed", error=str(exc))
     return None
 
 
-def _set_in_cache(cache_key: str, market_data: MarketData) -> "None":
-    """Store a MarketData object in Redis cache with TTL."""
+def _set_in_cache(cache_key: str, market_data: "MarketData") -> "None":
+    """Store a MarketData object in Redis cache with TTL.
+
+    Security: uses orjson (JSON) serialisation instead of pickle.
+    The ``_FETCHER_JSON_PREFIX`` magic prefix is prepended so that
+    :func:`_get_from_cache` can distinguish our blobs from legacy
+    pickle entries.
+    """
     try:
-        import redis
+        import redis  # noqa: PLC0415
 
         settings = get_settings()
         r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
         ttl = getattr(settings, "CACHE_TTL_SECONDS", 3600)
-        r.setex(cache_key, ttl, pickle.dumps(market_data))
+        payload = _FETCHER_JSON_PREFIX + orjson.dumps(
+            _market_data_to_dict(market_data),
+            option=orjson.OPT_NON_STR_KEYS,
+        )
+        r.setex(cache_key, ttl, payload)
         logger.debug("cache_set", cache_key=cache_key[:16], ttl=ttl)
     except Exception as exc:
         logger.debug("cache_set_failed", error=str(exc))

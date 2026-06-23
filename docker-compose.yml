@@ -15,6 +15,21 @@ version: "3.9"
 #   celery-beat     — Celery beat scheduler (periodic tasks)
 #   frontend        — React + Vite dev server (hot-reload)
 #
+# Security hardening (Phase 1)
+# ----------------------------
+# Redis is now protected by a password (``requirepass``) and its host port
+# binding is restricted to the loopback interface (127.0.0.1) so it is not
+# reachable from other hosts on the local network.
+#
+# The ``REDIS_PASSWORD`` environment variable is propagated to all backend
+# services.  The ``Settings._inject_redis_auth`` validator in
+# ``app/core/config.py`` automatically rewrites the Redis URLs to embed the
+# password in the URL authority, so no other code changes are needed.
+#
+# The ``SECRET_KEY`` environment variable is also propagated so that
+# WebSocket HMAC tokens can be signed and verified.  In development a random
+# key is auto-generated per-process if this is left empty (see config.py).
+#
 # Parallelism notes:
 #   Multiple optimization runs are processed in parallel by setting
 #   ``--concurrency=N`` (one ``prefork`` child process per slot). Combined
@@ -24,6 +39,10 @@ version: "3.9"
 #   env vars without rebuilding.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Shared environment anchor ─────────────────────────────────────────────────
+# Redis URLs intentionally omit the password here; the Settings validator
+# in config.py rewrites them at runtime to embed REDIS_PASSWORD.  This keeps
+# the password out of the Compose file itself (it is injected via the env var).
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/portfolio_optimizer
   REDIS_URL: redis://redis:6379/0
@@ -36,9 +55,21 @@ x-backend-env: &backend-env
   CACHE_TTL_SECONDS: "3600"
   RISK_FREE_RATE: "0.02"
   OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  # ── Security ──────────────────────────────────────────────────────────────
+  # REDIS_PASSWORD is read from the host environment or a .env file.
+  # A non-empty value causes config.py to rewrite all Redis URLs with auth.
+  # In development this defaults to a simple password; change it or leave
+  # empty to run without Redis auth (not recommended even locally).
+  REDIS_PASSWORD: "${REDIS_PASSWORD:-devpassword}"
+  # SECRET_KEY is used to sign WebSocket HMAC tokens.  In development,
+  # config.py auto-generates a random key if this is left at the default
+  # placeholder, so it is safe to leave unset locally.
+  SECRET_KEY: "${SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}"
+  # ALLOWED_ORIGINS controls CORS.  Defaults to the Vite dev server.
+  ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"
 
 services:
-  # ── PostgreSQL ──────────────────────────────────────────────────────────
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -49,7 +80,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d portfolio_optimizer"]
       interval: 10s
@@ -57,23 +88,46 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── Redis ───────────────────────────────────────────────────────────────
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  # Security hardening applied:
+  #   1. ``requirepass`` — clients must AUTH before any command.
+  #   2. ``bind 127.0.0.1`` — only reachable from the loopback interface on
+  #      the host; other containers reach it via the Docker bridge network
+  #      using the service hostname ``redis``.  The host port is bound to
+  #      127.0.0.1 so it is not exposed to the LAN.
+  #   3. ``protected-mode yes`` — Redis's own protection layer (redundant
+  #      with requirepass but adds defence-in-depth).
+  #   4. ``rename-command FLUSHALL ""`` — disables the dangerous FLUSHALL
+  #      command so a compromised client cannot wipe all data.
+  #   5. ``rename-command CONFIG ""`` — disables CONFIG so a compromised
+  #      client cannot reconfigure Redis at runtime.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass "${REDIS_PASSWORD:-devpassword}"
+      --protected-mode yes
+      --loglevel notice
+      --rename-command FLUSHALL ""
+      --rename-command CONFIG ""
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      # Bind to loopback only — not accessible from other hosts on the LAN
+      - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Use AUTH in the healthcheck so it works with requirepass
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-devpassword}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
 
-  # ── Backend (FastAPI) ───────────────────────────────────────────────────
+  # ── Backend (FastAPI) ─────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -85,7 +139,7 @@ services:
     volumes:
       - ./backend:/app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,7 +155,7 @@ services:
       retries: 3
       start_period: 30s
 
-  # ── Celery Worker — default queue (classical optimization runs) ─────────
+  # ── Celery Worker — default queue (classical optimization runs) ───────────
   # Handles fast classical-only optimization runs. Higher concurrency lets
   # many users submit runs in parallel without queueing.
   worker:
@@ -126,7 +180,7 @@ services:
              --queues=default
              -n default-worker@%h"
 
-  # ── Celery Worker — quantum queue ───────────────────────────────────────
+  # ── Celery Worker — quantum queue ─────────────────────────────────────────
   # Dedicated worker for the quantum queue so a long QAOA/VQE job never
   # blocks the default queue. Concurrency is intentionally lower because
   # each quantum simulation is CPU-bound.
@@ -152,7 +206,7 @@ services:
              --queues=quantum
              -n quantum-worker@%h"
 
-  # ── Celery Beat (Periodic Task Scheduler) ───────────────────────────────
+  # ── Celery Beat (Periodic Task Scheduler) ─────────────────────────────────
   celery-beat:
     build:
       context: ./backend
@@ -173,7 +227,7 @@ services:
       --loglevel=info
       --scheduler celery.beat:PersistentScheduler
 
-  # ── Frontend (React + Vite) ─────────────────────────────────────────────
+  # ── Frontend (React + Vite) ───────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -187,7 +241,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "3000:5173"
+      - "127.0.0.1:3000:5173"
     depends_on:
       - backend
     command: npm run dev -- --host 0.0.0.0

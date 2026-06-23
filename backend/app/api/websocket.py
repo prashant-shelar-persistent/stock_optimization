@@ -1,11 +1,31 @@
 """WebSocket endpoint for streaming agent progress.
 
-Endpoint: WS /ws/runs/{run_id}/progress
+Endpoint: WS /ws/runs/{run_id}/progress?token=<ws_token>
 
 The frontend connects to this endpoint after submitting an optimization run.
 The Celery worker publishes progress events to a Redis pub/sub channel
 (channel name: ``run:{run_id}:progress``). This endpoint subscribes to that
 channel and forwards messages to the WebSocket client.
+
+Security hardening (Phase 2)
+-----------------------------
+Authentication is enforced **before** ``websocket.accept()`` is called.
+
+The client must supply a ``?token=`` query parameter containing the
+``ws_token`` returned by ``POST /api/v1/optimize``.  The token is:
+
+- HMAC-SHA256 signed with the application ``SECRET_KEY``
+- Scoped to the specific ``run_id`` (cannot be replayed for a different run)
+- Valid for 300 seconds (5 minutes) from issuance
+
+If the token is missing, expired, or has an invalid signature the handler
+calls ``websocket.close(code=4001)`` *without* accepting the connection,
+so the client receives a WebSocket close frame with code 4001 (Policy
+Violation) rather than a successful upgrade.
+
+The ``run_id`` path parameter is validated as a UUID v4 string via the
+``_RunId`` annotated type alias, which rejects non-UUID strings before they
+reach the handler.
 
 Message format (JSON):
     Progress event:
@@ -52,12 +72,14 @@ Design notes:
 import asyncio
 import json
 from datetime import UTC, datetime
+from typing import Annotated
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Path, Query, WebSocket, WebSocketDisconnect
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.security import WsTokenError, verify_ws_token
 
 
 logger = get_logger(__name__)
@@ -72,30 +94,99 @@ _PING_INTERVAL_SECONDS = 30
 # How long to wait for a single Redis message poll before looping
 _POLL_TIMEOUT_SECONDS = 1.0
 
+# UUID v4 regex — same pattern used in chat.py for session IDs
+_UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+# Annotated path type that validates run_id as a UUID v4 string.
+# Rejects non-UUID strings (e.g. path traversal probes) before the handler
+# is invoked.
+_RunId = Annotated[
+    str,
+    Path(
+        title="Run ID",
+        description="UUID v4 of the optimization run",
+        min_length=36,
+        max_length=36,
+        pattern=_UUID_PATTERN,
+    ),
+]
+
 
 @router.websocket("/ws/runs/{run_id}/progress")
 async def run_progress_websocket(
     websocket: WebSocket,
-    run_id: str,
+    run_id: _RunId,
+    token: str | None = Query(
+        default=None,
+        description=(
+            "HMAC-signed WebSocket authentication token issued by "
+            "POST /api/v1/optimize.  Required.  The token is scoped to "
+            "this specific run_id and expires after 300 seconds."
+        ),
+    ),
 ) -> "None":
     """Stream agent progress events for a given optimization run.
 
-    The client connects immediately after submitting an optimization run.
-    This handler subscribes to the Redis pub/sub channel for the run and
-    forwards all messages to the WebSocket until the run completes or fails.
+    Authentication
+    --------------
+    The ``?token=`` query parameter is verified *before* ``accept()`` is
+    called.  If the token is missing, expired, or invalid the connection is
+    closed with WebSocket close code 4001 (Policy Violation) without
+    upgrading the protocol.
+
+    Streaming
+    ---------
+    After successful authentication the handler subscribes to the Redis
+    pub/sub channel ``run:{run_id}:progress`` and forwards all messages to
+    the WebSocket until the run completes, fails, or the connection times out.
 
     A keepalive ping is sent every 30 seconds to prevent proxy timeouts
     during long-running quantum optimization jobs.
     """
-    await websocket.accept()
-    logger.info("websocket_connected", run_id=run_id)
-
     settings = get_settings()
+
+    # ── Token authentication (BEFORE accept()) ────────────────────────────────
+    # Verify the HMAC token before upgrading the WebSocket connection.
+    # If verification fails we close without accepting — the client receives
+    # a close frame with code 4001 (Policy Violation).
+    if token is None:
+        logger.warning(
+            "websocket_auth_missing_token",
+            run_id=run_id,
+            client=websocket.client.host if websocket.client else "unknown",
+        )
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+
+    try:
+        verify_ws_token(
+            token=token,
+            expected_run_id=run_id,
+            secret_key=settings.SECRET_KEY,
+        )
+    except WsTokenError as exc:
+        logger.warning(
+            "websocket_auth_failed",
+            run_id=run_id,
+            reason=exc.reason,
+            client=websocket.client.host if websocket.client else "unknown",
+        )
+        await websocket.close(code=4001, reason="Invalid or expired authentication token")
+        return
+
+    # ── Accept the authenticated connection ───────────────────────────────────
+    await websocket.accept()
+    logger.info(
+        "websocket_connected",
+        run_id=run_id,
+        client=websocket.client.host if websocket.client else "unknown",
+    )
+
     channel = f"run:{run_id}:progress"
 
     try:
-        # Create a dedicated Redis connection for pub/sub
-        # decode_responses=True so message data comes back as str
+        # Create a dedicated Redis connection for pub/sub.
+        # decode_responses=True so message data comes back as str.
         redis_client = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",

@@ -203,9 +203,32 @@ class FrontierReport(BaseModel):
 
 
 class OptimizationSubmitResponse(BaseModel):
-    """Response for POST /api/v1/optimize."""
+    """Response for POST /api/v1/optimize.
+
+    Security note (Phase 2)
+    -----------------------
+    ``ws_token`` is a short-lived HMAC-SHA256 signed token scoped to this
+    specific ``run_id``.  The frontend must pass it as the ``?token=`` query
+    parameter when opening the WebSocket connection at
+    ``/ws/runs/{run_id}/progress``.
+
+    The token is issued by ``app.core.security.create_ws_token`` and verified
+    by the WebSocket handler before ``websocket.accept()`` is called.  A token
+    for run A cannot be used to subscribe to run B.
+
+    Token lifetime: 300 seconds (5 minutes) from issuance.
+    """
 
     run_id: str = Field(description="UUID of the submitted optimization run")
+    ws_token: str | None = Field(
+        default=None,
+        description=(
+            "Short-lived HMAC-signed token for WebSocket authentication. "
+            "Pass as ?token=<ws_token> when connecting to "
+            "/ws/runs/{run_id}/progress. Valid for 300 seconds. "
+            "None if token generation failed (non-fatal)."
+        ),
+    )
 
 
 class RunStatusResponse(BaseModel):

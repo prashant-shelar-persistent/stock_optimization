@@ -14,6 +14,23 @@ Lifecycle:
       FastAPI lifespan shutdown handler via ``close_redis()``.
     - Each database session is opened per-request, committed on clean exit,
       rolled back on exception, and always closed in the ``finally`` block.
+
+Security hardening (Phase 1)
+-----------------------------
+The Redis connection pool now uses ``settings.REDIS_URL`` which has already
+been rewritten by the ``Settings._inject_redis_auth`` Pydantic validator to
+embed the ``REDIS_PASSWORD`` in the URL authority
+(``redis://:password@host:port/db``).  This means:
+
+  - No code in this module needs to handle the password explicitly.
+  - All Redis clients created from this pool authenticate automatically.
+  - The password is never logged (it is embedded in the URL, not passed as a
+    separate argument that might appear in tracebacks or debug output).
+
+The ``decode_responses=False`` setting is preserved because the data layer
+uses JSON serialisation (replacing the previous pickle) for cached NumPy
+arrays and DataFrames.  The WebSocket handler creates its own client with
+``decode_responses=True`` for pub/sub message handling.
 """
 
 from collections.abc import AsyncGenerator
@@ -56,13 +73,20 @@ async def get_redis(
     The pool is created on first call and reused for the lifetime of the
     process. Individual connections are checked out per-request from the pool.
 
+    Authentication
+    --------------
+    ``settings.REDIS_URL`` already contains the password embedded in the URL
+    authority by the ``Settings._inject_redis_auth`` validator, so no
+    additional auth configuration is needed here.  The ``redis.asyncio``
+    client parses the URL and sends the AUTH command automatically on connect.
+
     The client is configured with ``decode_responses=False`` because the
-    data layer uses pickle serialisation for cached NumPy arrays and
-    DataFrames. The WebSocket handler creates its own client with
-    ``decode_responses=True`` for pub/sub message handling.
+    data layer uses JSON serialisation for cached NumPy arrays and DataFrames.
+    The WebSocket handler creates its own client with ``decode_responses=True``
+    for pub/sub message handling.
 
     Args:
-        settings: Injected Settings singleton.
+        settings: Injected Settings singleton (contains the authenticated URL).
 
     Yields:
         An async Redis client backed by the shared connection pool.
@@ -70,9 +94,9 @@ async def get_redis(
     global _redis_pool  # noqa: PLW0603
     if _redis_pool is None:
         _redis_pool = aioredis.from_url(
-            settings.REDIS_URL,
+            settings.REDIS_URL,  # Password already embedded by Settings validator
             encoding="utf-8",
-            decode_responses=False,  # Data layer uses pickle serialisation
+            decode_responses=False,  # Data layer uses JSON serialisation
             max_connections=20,
             socket_connect_timeout=5,
             socket_timeout=5,

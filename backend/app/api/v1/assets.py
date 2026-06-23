@@ -18,9 +18,10 @@ Design notes:
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from app.core.logging import get_logger
+from app.core.rate_limit import RATE_LIMIT_READ, limiter
 from app.schemas.responses import AssetSearchResult
 
 
@@ -216,8 +217,14 @@ def _lookup_yfinance(ticker: str) -> dict[str, str] | None:
         "Falls back to yfinance for unknown tickers. "
         "Returns up to ``limit`` matching results (default 10, max 50)."
     ),
+    responses={
+        200: {"description": "Asset search results"},
+        429: {"description": "Rate limit exceeded"},
+    },
 )
+@limiter.limit(RATE_LIMIT_READ)
 async def search_assets(
+    request: Request,
     q: str = Query(
         min_length=1,
         max_length=20,

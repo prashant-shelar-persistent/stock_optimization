@@ -7,8 +7,23 @@
 # Fedora / RHEL 9+). If you use Docker Desktop instead, see the "Docker
 # compatibility" note at the bottom of this file.
 #
-# The bug it fixes
-# ----------------
+# Security env vars (Phase 1 hardening)
+# --------------------------------------
+# This override explicitly re-declares ``REDIS_PASSWORD``, ``SECRET_KEY``,
+# and ``ALLOWED_ORIGINS`` for every backend service so that:
+#   1. The values are visible in ``docker compose config`` output for auditing.
+#   2. Operators can override them per-service if needed (e.g. a test worker
+#      with a different Redis DB).
+#   3. The override file is the single place to change dev credentials without
+#      touching the base ``docker-compose.yml``.
+#
+# To use a custom password locally, create a ``.env`` file in the project root:
+#
+#     REDIS_PASSWORD=my_local_redis_password
+#     SECRET_KEY=my_local_secret_key
+#
+# The ``userns_mode: "keep-id"`` fix
+# -----------------------------------
 # Symptom (from `podman-compose up frontend`):
 #
 #     EPERM: operation not permitted, open '/app/index.html'
@@ -51,15 +66,37 @@
 services:
   backend:
     userns_mode: "keep-id"
+    environment:
+      # Explicitly propagate security env vars so they appear in
+      # `docker compose config` output and can be audited / overridden here.
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-devpassword}"
+      SECRET_KEY: "${SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"
 
   worker:
     userns_mode: "keep-id"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-devpassword}"
+      SECRET_KEY: "${SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"
 
   worker-quantum:
     userns_mode: "keep-id"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-devpassword}"
+      SECRET_KEY: "${SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"
 
   celery-beat:
     userns_mode: "keep-id"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-devpassword}"
+      SECRET_KEY: "${SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"
 
   frontend:
     userns_mode: "keep-id"
+    # Frontend does not need Redis or SECRET_KEY, but ALLOWED_ORIGINS is
+    # included for completeness (Vite may use it for proxy configuration).
+    environment:
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"

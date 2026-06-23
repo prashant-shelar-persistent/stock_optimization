@@ -45,14 +45,21 @@ Design decisions
   regex pattern validator via the ``SessionIdPath`` annotated alias defined
   in ``app.chat.schemas``.
 - All endpoints are tagged ``chat`` for OpenAPI grouping.
+
+Security hardening (Phase 2)
+-----------------------------
+The in-process rate limiter (``_rate_limit_buckets`` / ``_check_rate_limit``)
+has been removed.  It was ineffective across multiple Uvicorn workers and
+Celery processes because each process maintained its own independent dict.
+
+Rate limiting is now handled globally by ``slowapi`` (Redis-backed) which is
+registered in ``main.py`` and works correctly across all processes.  The
+``slowapi`` limiter is applied via decorators in Phase 3.
 """
 
-import time
-from collections import defaultdict
 from typing import Annotated
 
 from fastapi import APIRouter, Path, Request
-from fastapi.responses import JSONResponse
 
 from app.chat.schemas import (
     ChatSessionResponse,
@@ -65,46 +72,12 @@ from app.chat.schemas import (
 from app.chat.service import ChatService
 from app.core.dependencies import DbDep
 from app.core.logging import get_logger
+from app.core.rate_limit import RATE_LIMIT_CHAT, RATE_LIMIT_CHAT_CREATE, limiter
 
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-# ── In-process rate limiter ────────────────────────────────────────────────────
-# Simple token-bucket: 5 messages per 10 seconds per client IP.
-# NOTE: This is an in-process guard only — production deployments should use
-# Redis-backed rate limiting (e.g. slowapi) for multi-process safety.
-_RATE_LIMIT_MESSAGES: int = 5
-_RATE_LIMIT_WINDOW_SECONDS: float = 10.0
-
-# Maps client IP → list of request timestamps within the current window
-_rate_limit_buckets: dict[str, list[float]] = defaultdict(list)
-
-
-def _check_rate_limit(client_ip: str) -> tuple[bool, float]:
-    """Check whether the client has exceeded the rate limit.
-
-    Returns:
-        (allowed, retry_after_seconds) — if allowed is False, retry_after
-        is the number of seconds until the oldest request expires.
-    """
-    now = time.monotonic()
-    window_start = now - _RATE_LIMIT_WINDOW_SECONDS
-    bucket = _rate_limit_buckets[client_ip]
-
-    # Evict timestamps outside the current window
-    _rate_limit_buckets[client_ip] = [t for t in bucket if t > window_start]
-    bucket = _rate_limit_buckets[client_ip]
-
-    if len(bucket) >= _RATE_LIMIT_MESSAGES:
-        # Oldest request in the window determines when the client can retry
-        retry_after = _RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])
-        return False, max(retry_after, 0.0)
-
-    # Record this request
-    _rate_limit_buckets[client_ip].append(now)
-    return True, 0.0
 
 # ── Path parameter type alias ─────────────────────────────────────────────────
 # Validates that the session_id path segment is a well-formed UUID v4 string.
@@ -173,7 +146,9 @@ _SessionId = Annotated[
         502: {"description": "LLM slot extraction failed (upstream error)"},
     },
 )
+@limiter.limit(RATE_LIMIT_CHAT_CREATE)
 async def create_session(
+    request: Request,
     body: CreateSessionRequest,
     db: DbDep,
 ) -> "ChatSessionResponse":
@@ -257,7 +232,9 @@ async def create_session(
         },
     },
 )
+@limiter.limit(RATE_LIMIT_CHAT)
 async def get_session(
+    request: Request,
     session_id: _SessionId,
     db: DbDep,
 ) -> "ChatSessionResponse":
@@ -390,11 +367,12 @@ async def get_session(
         502: {"description": "LLM slot extraction failed (upstream error)"},
     },
 )
+@limiter.limit(RATE_LIMIT_CHAT)
 async def send_message(
+    request: Request,
     session_id: _SessionId,
     body: SendMessageRequest,
     db: DbDep,
-    request: Request,
 ) -> "SendMessageResponse":
     """Send a user message and receive the assistant's reply.
 
@@ -402,8 +380,6 @@ async def send_message(
         session_id: UUID of the target session.
         body:       Request body containing the user's ``content`` string.
         db:         Injected async SQLAlchemy session.
-        request:    FastAPI Request object (used for client IP rate limiting).
-
     Returns:
         A :class:`~app.chat.schemas.SendMessageResponse` with the assistant
         reply, updated session state, and optional ``payload_preview``.
@@ -416,22 +392,7 @@ async def send_message(
         ChatTooManyMessagesError (→ HTTP 422): If the session has reached
             the maximum allowed message count.
         ChatSlotExtractionError (→ HTTP 502): If the LLM call fails.
-        HTTP 429: If the client has exceeded the per-IP rate limit.
     """
-    # Rate-limit check: 5 messages per 10 seconds per client IP
-    client_ip = (request.client.host if request.client else "unknown") or "unknown"
-    allowed, retry_after = _check_rate_limit(client_ip)
-    if not allowed:
-        return JSONResponse(  # type: ignore[return-value]
-            status_code=429,
-            content={
-                "error_code": "CHAT_RATE_LIMITED",
-                "message": "Too many messages. Please wait before sending another.",
-                "details": {"retry_after_seconds": round(retry_after, 1)},
-            },
-            headers={"Retry-After": str(int(retry_after) + 1)},
-        )
-
     service = ChatService(db=db)
 
     logger.info(
@@ -581,7 +542,9 @@ async def send_message(
         },
     },
 )
+@limiter.limit(RATE_LIMIT_CHAT)
 async def confirm_session(
+    request: Request,
     session_id: _SessionId,
     body: ConfirmSessionRequest,
     db: DbDep,

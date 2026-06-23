@@ -83,14 +83,21 @@ def sector_tags_4() -> dict[str, str]:
 
 
 # ── Chat rate-limit bucket reset ──────────────────────────────────────────────
-# The in-process rate limiter in app.api.v1.chat uses a module-level dict.
-# Clear it before each test so rate-limit state does not leak between tests.
+# NOTE (Phase 2): The in-process rate limiter (_rate_limit_buckets /
+# _check_rate_limit) has been removed from app.api.v1.chat.  Rate limiting
+# is now handled by slowapi (Redis-backed) registered in main.py.
+# This fixture is kept as a no-op for backwards compatibility with any
+# existing test that might reference it, but it no longer does anything.
 
 @pytest.fixture(autouse=True)
 def reset_chat_rate_limit_buckets() -> None:
-    """Clear the in-process rate-limit bucket before each test."""
-    try:
-        from app.api.v1.chat import _rate_limit_buckets  # noqa: PLC0415
-        _rate_limit_buckets.clear()
-    except ImportError:
-        pass
+    """No-op fixture (Phase 2: in-process rate limiter removed from chat.py).
+
+    The ``_rate_limit_buckets`` dict no longer exists in ``app.api.v1.chat``.
+    Rate limiting is now handled globally by ``slowapi`` (Redis-backed).
+    This fixture is retained as a no-op to avoid breaking any test that
+    previously relied on it being present.
+    """
+    # No-op: the in-process rate limiter was removed in Phase 2.
+    # slowapi (Redis-backed) handles rate limiting globally in main.py.
+    pass
