@@ -1,0 +1,147 @@
+# ────────────────────────────────────────────────────────────────────��────────
+# Confluence Upload — Page Hierarchy Configuration
+#
+# This file defines how the docs/ folder maps to Confluence pages.
+# Each entry becomes a Confluence page under the configured parent.
+#
+# Structure:
+#   title:    Confluence page title (must be unique within the space)
+#   file:     Path to the Markdown file (relative to docs/)
+#   children: Nested sub-pages (optional)
+# ─────────────────────────────────────────────────────────────────────────────
+
+root_title: "Portfolio Optimizer Documentation"
+
+pages:
+  - title: "Home"
+    file: "index.md"
+
+  - title: "Getting Started"
+    file: "02-getting-started/README.md"
+    children:
+      - title: "Project Overview"
+        file: "01-getting-started/overview.md"
+      - title: "Docker Quickstart"
+        file: "01-getting-started/quickstart-docker.md"
+      - title: "Local Quickstart"
+        file: "01-getting-started/quickstart-local.md"
+      - title: "Environment Variables"
+        file: "01-getting-started/environment-variables.md"
+      - title: "Podman Notes"
+        file: "01-getting-started/podman-notes.md"
+
+  - title: "Architecture"
+    file: "03-architecture/README.md"
+    children:
+      - title: "System Overview"
+        file: "02-architecture/system-overview.md"
+      - title: "Agent Pipeline"
+        file: "02-architecture/agent-pipeline.md"
+      - title: "Request Lifecycle"
+        file: "02-architecture/request-lifecycle.md"
+      - title: "Technology Decisions"
+        file: "02-architecture/technology-decisions.md"
+
+  - title: "Backend"
+    file: "03-backend/README.md"
+    children:
+      - title: "Application Factory"
+        file: "03-backend/application-factory.md"
+      - title: "Configuration"
+        file: "03-backend/configuration.md"
+      - title: "Dependencies"
+        file: "03-backend/dependencies.md"
+      - title: "Exceptions"
+        file: "03-backend/exceptions.md"
+      - title: "Logging"
+        file: "03-backend/logging.md"
+
+  - title: "API Reference"
+    file: "04-api-reference/README.md"
+    children:
+      - title: "Optimize Endpoint"
+        file: "04-api-reference/optimize-endpoint.md"
+      - title: "Assets Endpoint"
+        file: "04-api-reference/assets-endpoint.md"
+      - title: "Health Endpoint"
+        file: "04-api-reference/health-endpoint.md"
+      - title: "Runs Endpoints"
+        file: "04-api-reference/runs-endpoints.md"
+      - title: "WebSocket Endpoint"
+        file: "04-api-reference/websocket-endpoint.md"
+      - title: "Error Codes"
+        file: "04-api-reference/error-codes.md"
+
+  - title: "Agent Layer"
+    file: "05-agent-layer/README.md"
+    children:
+      - title: "Graph Definition"
+        file: "05-agent-layer/graph-definition.md"
+      - title: "Agent State"
+        file: "05-agent-layer/agent-state.md"
+      - title: "Node: Data Fetch"
+        file: "05-agent-layer/node-data-fetch.md"
+      - title: "Node: Constraint Validation"
+        file: "05-agent-layer/node-constraint-validation.md"
+      - title: "Node: Classical Optimization"
+        file: "05-agent-layer/node-classical.md"
+      - title: "Node: Quantum Dispatch"
+        file: "05-agent-layer/node-quantum-dispatch.md"
+      - title: "Node: Frontier"
+        file: "05-agent-layer/node-frontier.md"
+      - title: "Node: Comparison"
+        file: "05-agent-layer/node-comparison.md"
+      - title: "Node: LLM Explanation"
+        file: "05-agent-layer/node-llm-explanation.md"
+      - title: "Error Routing"
+        file: "05-agent-layer/error-routing.md"
+
+  - title: "Classical Optimization"
+    file: "06-classical-optimization/README.md"
+
+  - title: "Quantum Optimization"
+    file: "07-quantum-optimization/README.md"
+    children:
+      - title: "QUBO Formulation"
+        file: "07-quantum-optimization/qubo-formulation.md"
+      - title: "QAOA Solver"
+        file: "07-quantum-optimization/qaoa-solver.md"
+      - title: "VQE Solver"
+        file: "07-quantum-optimization/vqe-solver.md"
+      - title: "Quantum Dispatcher"
+        file: "07-quantum-optimization/quantum-dispatcher.md"
+      - title: "Quantum vs Classical"
+        file: "07-quantum-optimization/quantum-vs-classical.md"
+
+  - title: "Data Layer"
+    file: "08-data-layer/README.md"
+
+  - title: "Database"
+    file: "09-database/README.md"
+
+  - title: "Task Queue"
+    file: "10-task-queue/README.md"
+
+  - title: "Frontend"
+    file: "11-frontend/README.md"
+
+  - title: "Deployment"
+    file: "13-deployment/README.md"
+
+  - title: "Testing"
+    file: "14-testing/README.md"
+
+  - title: "CI/CD"
+    file: "15-cicd/README.md"
+
+  - title: "Security"
+    file: "16-security/README.md"
+
+  - title: "Operations"
+    file: "17-operations/README.md"
+
+  - title: "Security Analysis"
+    file: "SECURITY_ANALYSIS.md"
+
+  - title: "Performance Optimization Report"
+    file: "../PERFORMANCE_OPTIMIZATION_REPORT.md"
