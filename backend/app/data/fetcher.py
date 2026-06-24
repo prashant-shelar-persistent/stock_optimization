@@ -23,6 +23,7 @@ import orjson
 import json
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -425,45 +426,64 @@ def _extract_close(raw: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
     return prices
 
 
+def _fetch_one_ticker_metadata(
+    ticker: str,
+) -> tuple[str, dict[str, Any]]:
+    """Fetch metadata for a single ticker. Returns (ticker, metadata_dict).
+
+    Designed to be called concurrently via ThreadPoolExecutor — each call
+    is an independent HTTP request to Yahoo Finance.
+    """
+    try:
+        # No custom session — avoids 429 rate limiting
+        info = yf.Ticker(ticker).info
+        sector = info.get("sector") or "Unknown"
+        return ticker, {
+            "name": info.get("longName") or info.get("shortName") or ticker,
+            "sector": sector,
+            "industry": info.get("industry") or "Unknown",
+            "exchange": info.get("exchange") or "Unknown",
+            "currency": info.get("currency") or "USD",
+            "market_cap": info.get("marketCap"),
+        }
+    except Exception as exc:
+        logger.warning(
+            "ticker_metadata_fetch_failed",
+            ticker=ticker,
+            error=str(exc),
+        )
+        return ticker, {
+            "name": ticker,
+            "sector": "Unknown",
+            "industry": "Unknown",
+            "exchange": "Unknown",
+            "currency": "USD",
+            "market_cap": None,
+        }
+
+
 def _fetch_ticker_metadata(
     tickers: list[str],
 ) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
-    """Fetch sector and other metadata for each ticker from yfinance."""
-    sector_map: dict[str, str] = {}
-    metadata: dict[str, dict[str, Any]] = {}
+    """Fetch sector and other metadata for each ticker from yfinance.
 
-    for ticker in tickers:
-        try:
-            # No custom session — avoids 429 rate limiting
-            info = yf.Ticker(ticker).info
+    Uses a ThreadPoolExecutor to issue all .info HTTP requests concurrently
+    (capped at 8 workers to avoid Yahoo Finance rate-limiting). For N tickers
+    this reduces latency from O(N * per_call) to O(max(per_call)) instead of
+    O(N * per_call).
+    """
+    if not tickers:
+        return {}, {}
 
-            sector = info.get("sector") or "Unknown"
-            sector_map[ticker] = sector
+    # Cap workers at 8 to stay within Yahoo Finance's rate limits.
+    max_workers = min(len(tickers), 8)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        results: list[tuple[str, dict[str, Any]]] = list(
+            pool.map(_fetch_one_ticker_metadata, tickers)
+        )
 
-            metadata[ticker] = {
-                "name": info.get("longName") or info.get("shortName") or ticker,
-                "sector": sector,
-                "industry": info.get("industry") or "Unknown",
-                "exchange": info.get("exchange") or "Unknown",
-                "currency": info.get("currency") or "USD",
-                "market_cap": info.get("marketCap"),
-            }
-        except Exception as exc:
-            logger.warning(
-                "ticker_metadata_fetch_failed",
-                ticker=ticker,
-                error=str(exc),
-            )
-            sector_map[ticker] = "Unknown"
-            metadata[ticker] = {
-                "name": ticker,
-                "sector": "Unknown",
-                "industry": "Unknown",
-                "exchange": "Unknown",
-                "currency": "USD",
-                "market_cap": None,
-            }
-
+    sector_map: dict[str, str] = {t: meta["sector"] for t, meta in results}
+    metadata: dict[str, dict[str, Any]] = {t: meta for t, meta in results}
     return sector_map, metadata
 
 

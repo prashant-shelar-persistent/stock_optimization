@@ -239,11 +239,45 @@ def _flag_dominance(
     A point p is dominated iff some other point q is at least as good
     on both axes and strictly better on one.  Direction-aware: "better"
     means lower for ``minimize`` axes and higher for ``maximize`` axes.
+
+    For the standard minimize-X / maximize-Y case (e.g. volatility vs return),
+    an O(N) single-pass algorithm is used: after sorting ascending by X, a
+    point is non-dominated iff its Y strictly exceeds all Y values to its left.
+    This replaces the original O(N^2) nested loop and matters when num_points
+    is large (>50).
+
+    For non-standard axis direction combinations the O(N^2) fallback is used.
     """
-    n = len(points)
-    if n <= 1:
+    if len(points) <= 1:
+        if points:
+            points[0].is_dominant = True
         return
 
+    if x_direction == "minimize" and y_direction == "maximize":
+        # O(N) pass: points are pre-sorted ascending by X (caller ensures this).
+        # A point is dominant iff no point to its left has a >= Y value.
+        best_y = float("-inf")
+        for p in points:
+            if p.y > best_y + 1e-9:
+                p.is_dominant = True
+                best_y = p.y
+            else:
+                p.is_dominant = False
+        return
+
+    if x_direction == "maximize" and y_direction == "minimize":
+        # Mirror case: descending X, ascending Y.
+        # Points are sorted ascending by X, so scan right-to-left.
+        best_y = float("inf")
+        for p in reversed(points):
+            if p.y < best_y - 1e-9:
+                p.is_dominant = True
+                best_y = p.y
+            else:
+                p.is_dominant = False
+        return
+
+    # General O(N^2) fallback for non-standard axis direction combinations.
     def better_or_equal(a: float, b: float, direction: str) -> bool:
         return a <= b + 1e-9 if direction == "minimize" else a >= b - 1e-9
 
@@ -383,21 +417,27 @@ def compute_frontier(
 
     # ── Step 2: parametric sweep ──────────────────────────────────────────
     eps_grid = np.linspace(x_lo, x_hi, num_points)
-    points: list[FrontierPoint] = []
 
-    for eps in eps_grid:
+    # Parallelise the sweep: each epsilon-constraint subproblem is independent.
+    # ThreadPoolExecutor is used instead of ProcessPoolExecutor because:
+    # (a) CLARABEL and SCS are C extensions that release the GIL during solving,
+    #     so threads achieve real parallelism for the solver portion.
+    # (b) Closures (like _solve_one below) are not picklable, which would prevent
+    #     ProcessPoolExecutor from working without a module-level helper function.
+    # For small num_points (<8) the thread-pool overhead exceeds the gain, so
+    # we fall back to the sequential loop in that case.
+    from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor  # noqa: PLC0415
+
+    def _solve_one(eps: float) -> "FrontierPoint | None":
+        """Solve one epsilon-constraint subproblem."""
         w = cp.Variable(n, nonneg=True)
         x_expr = _measure_expr(x_name, w, mu, cov, sector_indices_by_name)
         y_expr = _measure_expr(y_name, w, mu, cov, sector_indices_by_name)
-
         cons = base_constraints(w)
-        # Constrain x to the current grid level (≤ eps when x minimises,
-        # ≥ eps when x maximises — symmetric formulation).
         if x_dir == "minimize":
             cons.append(x_expr <= float(eps))
         else:
             cons.append(x_expr >= float(eps))
-
         objective = cp.Maximize(y_expr) if y_dir == "maximize" else cp.Minimize(y_expr)
         problem = cp.Problem(objective, cons)
         try:
@@ -406,24 +446,35 @@ def compute_frontier(
             try:
                 problem.solve(solver=cp.SCS, verbose=False)
             except Exception:
-                continue
-
+                return None
         if problem.status in (cp.INFEASIBLE, cp.INFEASIBLE_INACCURATE):
-            continue
+            return None
         if w.value is None:
-            continue
-
+            return None
         w_val = np.maximum(w.value, 0.0)
         s = w_val.sum()
         if s <= 1e-9:
-            continue
+            return None
         w_val = w_val / s
-
-        point = _build_point(
+        return _build_point(
             w_val, tickers, budget, x_name, y_name, mu, cov,
             sector_indices_by_name, sector_map, problem.status or "optimal",
         )
-        points.append(point)
+
+    if num_points >= 8:
+        # Parallel path: distribute solves across available CPU cores.
+        # Cap workers at num_points to avoid idle threads.
+        _workers = min(num_points, os.cpu_count() or 4)
+        with _ThreadPoolExecutor(max_workers=_workers) as _pool:
+            _raw_results = list(_pool.map(_solve_one, eps_grid))
+        points: list[FrontierPoint] = [p for p in _raw_results if p is not None]
+    else:
+        # Sequential fallback for small sweeps where thread overhead > gain.
+        points = []
+        for eps in eps_grid:
+            pt = _solve_one(eps)
+            if pt is not None:
+                points.append(pt)
 
     if not points:
         return FrontierReport(
